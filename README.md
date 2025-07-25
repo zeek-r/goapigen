@@ -258,7 +258,7 @@ Check out the `examples/` directory for:
 
 ## 🛠️ Built With
 
-- **Go 1.21+** - Core language
+- **Go 1.24+** - Core language
 - **Chi Router** - HTTP routing
 - **MongoDB Driver** - Database integration
 - **OpenAPI 3.0** - API specifications
