@@ -1,0 +1,198 @@
+package {{.HandlerPackage}}
+
+import (
+	"net/http"
+	"{{.ImportPath}}/internal/pkg/httputil"
+	{{- if or (eq .Method "POST") (eq .Method "PUT") (eq .Method "DELETE")}}
+	"{{.ImportPath}}/internal/pkg/domain"
+	{{- end}}
+	{{- if .ImportTime}}
+	"time"
+	{{- end}}
+	
+	"github.com/go-chi/chi/v5"
+	"{{.ImportPath}}/internal/services/{{.Domain}}"
+)
+
+// {{.OperationID}}Handler handles the {{.OperationID}} operation
+type {{.OperationID}}Handler struct {
+	service service.{{.SchemaName}}Service
+	wrapper *httputil.HandlerWrapper
+}
+
+// New{{.OperationID}}Handler creates a new handler for the {{.OperationID}} operation
+func New{{.OperationID}}Handler(service service.{{.SchemaName}}Service) *{{.OperationID}}Handler {
+	return &{{.OperationID}}Handler{
+		service: service,
+		wrapper: httputil.DefaultHandlerWrapper(),
+	}
+}
+
+{{- if .HasRequestBody}}
+// {{.RequestTypeName}} represents the request for {{.OperationID}} operation
+type {{.RequestTypeName}} struct {
+{{- range .RequestFields}}
+	{{.Name}} {{.Type}} `json:"{{.JsonTag}}"`
+{{- end}}
+}
+{{- end}}
+
+// Register registers this handler with the provided router
+func (h *{{.OperationID}}Handler) Register(r chi.Router) {
+	r.{{title .Method}}("{{.Path}}", h.Handle())
+}
+
+// Handle returns the http.HandlerFunc for this operation
+func (h *{{.OperationID}}Handler) Handle() http.HandlerFunc {
+	{{- if .HasRequestBody}}
+	var requestType {{.RequestTypeName}}
+	{{- else}}
+	var requestType interface{} = nil
+	{{- end}}
+	
+	return h.wrapper.WrapHandler(
+		h.handle,
+		{{.SuccessStatus}},
+		requestType,
+	)
+}
+
+// handle processes the operation by:
+// 1. Extracting path parameters
+// 2. Converting HTTP request to domain model
+// 3. Calling the appropriate service method
+// 4. Returning the result
+func (h *{{.OperationID}}Handler) handle(r *http.Request, input interface{}) (interface{}, error) {
+	ctx := r.Context()
+	_ = ctx // Always use ctx to prevent unused variable warnings
+	
+	{{- if eq .Method "GET"}}
+	{{- if contains .Path "{"}}
+	// Extract path parameters
+	{{- range .PathParams}}
+	{{.VarName}} := httputil.URLParam(r, "{{.ParamName}}")
+	{{- end}}
+	
+	{{- $hasID := false }}
+	{{- range .PathParams}}
+	{{- if eq .ParamName "id"}}
+	{{- $hasID = true }}
+	{{- end}}
+	{{- end}}
+	
+	{{- if $hasID}}
+	return h.service.GetByID(ctx, id)
+	{{- else}}
+	return h.service.List(ctx)
+	{{- end}}
+	{{- else}}
+	// No path parameters
+	return h.service.List(ctx)
+	{{- end}}
+	
+	{{- else if eq .Method "POST"}}
+	{{- if contains .Path "{"}}
+	// Extract path parameters
+	{{- range .PathParams}}
+	{{.VarName}} := httputil.URLParam(r, "{{.ParamName}}")
+	{{- end}}
+	{{- end}}
+
+	{{- if .HasRequestBody}}
+	req, ok := input.({{.RequestTypeName}})
+	if !ok {
+		return nil, domain.NewBadRequestError("Invalid request format", nil)
+	}
+	
+	// Convert HTTP request to domain request
+	createReq := service.{{.SchemaName}}CreateRequest{
+		{{- range .RequestFields}}
+		{{.Name}}: req.{{.Name}},
+		{{- end}}
+	}
+	return h.service.Create(ctx, createReq)
+	{{- else}}
+	return h.service.Create(ctx, service.{{.SchemaName}}CreateRequest{})
+	{{- end}}
+	
+	{{- else if eq .Method "PUT"}}
+	{{- if contains .Path "{"}}
+	// Extract path parameters
+	{{- range .PathParams}}
+	{{.VarName}} := httputil.URLParam(r, "{{.ParamName}}")
+	{{- end}}
+	
+	{{- $hasID := false }}
+	{{- range .PathParams}}
+	{{- if eq .ParamName "id"}}
+	{{- $hasID = true }}
+	{{- end}}
+	{{- end}}
+	
+	{{- if $hasID}}
+	{{- if .HasRequestBody}}
+	req, ok := input.({{.RequestTypeName}})
+	if !ok {
+		return nil, domain.NewBadRequestError("Invalid request format", nil)
+	}
+	
+	// Convert HTTP request to domain request
+	updateReq := service.{{.SchemaName}}UpdateRequest{
+		{{- range .RequestFields}}
+		{{- if and (ne .Name "CreatedAt") (ne .Name "UpdatedAt")}}
+		{{.Name}}: req.{{.Name}},
+		{{- end}}
+		{{- end}}
+	}
+	return h.service.Update(ctx, id, updateReq)
+	{{- else}}
+	return h.service.Update(ctx, id, service.{{.SchemaName}}UpdateRequest{})
+	{{- end}}
+	{{- else}}
+	return nil, domain.NewBadRequestError("Missing ID parameter", nil)
+	{{- end}}
+	{{- else}}
+	return nil, domain.NewBadRequestError("Path parameter required for update operation", nil)
+	{{- end}}
+	
+	{{- else if eq .Method "DELETE"}}
+	{{- if contains .Path "{"}}
+	// Extract path parameters
+	{{- range .PathParams}}
+	{{.VarName}} := httputil.URLParam(r, "{{.ParamName}}")
+	{{- end}}
+	
+	{{- $hasID := false }}
+	{{- range .PathParams}}
+	{{- if eq .ParamName "id"}}
+	{{- $hasID = true }}
+	{{- end}}
+	{{- end}}
+	
+	{{- if $hasID}}
+	// Call service delete method
+	if err := h.service.Delete(ctx, id); err != nil {
+		return nil, err
+	}
+	
+	// Return an empty response with status code already set in wrapper
+	type DeleteResponse struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	return DeleteResponse{
+		Success: true,
+		Message: "Resource successfully deleted",
+	}, nil
+	{{- else}}
+	return nil, domain.NewBadRequestError("Missing ID parameter", nil)
+	{{- end}}
+	{{- else}}
+	return nil, domain.NewBadRequestError("Path parameter required for delete operation", nil)
+	{{- end}}
+	
+	{{- else}}
+	return nil, domain.NewBadRequestError("Unsupported HTTP method: {{.Method}}", nil)
+	{{- end}}
+}
+

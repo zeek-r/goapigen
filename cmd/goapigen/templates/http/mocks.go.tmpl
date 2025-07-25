@@ -1,0 +1,44 @@
+package mocks
+
+import (
+	"context"
+
+	"github.com/stretchr/testify/mock"
+	"{{.ImportPath}}/internal/services/{{.Domain}}"
+	{{.PackageName}} "{{.ModelImportPath}}"
+)
+
+// Mock{{.SchemaName}}Service is a mock implementation of service.{{.SchemaName}}Service
+type Mock{{.SchemaName}}Service struct {
+	mock.Mock
+}
+
+// Create is the mocked implementation
+func (m *Mock{{.SchemaName}}Service) Create(ctx context.Context, request service.{{.SchemaName}}CreateRequest) ({{.PackageName}}.{{.SchemaName}}, error) {
+	args := m.Called(ctx, request)
+	return args.Get(0).({{.PackageName}}.{{.SchemaName}}), args.Error(1)
+}
+
+// GetByID is the mocked implementation
+func (m *Mock{{.SchemaName}}Service) GetByID(ctx context.Context, id string) ({{.PackageName}}.{{.SchemaName}}, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).({{.PackageName}}.{{.SchemaName}}), args.Error(1)
+}
+
+// List is the mocked implementation
+func (m *Mock{{.SchemaName}}Service) List(ctx context.Context) ([]{{.PackageName}}.{{.SchemaName}}, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]{{.PackageName}}.{{.SchemaName}}), args.Error(1)
+}
+
+// Update is the mocked implementation
+func (m *Mock{{.SchemaName}}Service) Update(ctx context.Context, id string, request service.{{.SchemaName}}UpdateRequest) ({{.PackageName}}.{{.SchemaName}}, error) {
+	args := m.Called(ctx, id, request)
+	return args.Get(0).({{.PackageName}}.{{.SchemaName}}), args.Error(1)
+}
+
+// Delete is the mocked implementation
+func (m *Mock{{.SchemaName}}Service) Delete(ctx context.Context, id string) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+} 

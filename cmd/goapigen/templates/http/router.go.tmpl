@@ -1,0 +1,43 @@
+package {{.HandlerPackage}}
+
+import (
+	"net/http"
+	
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+)
+
+// NewRouter creates a new Chi router with all API endpoints registered
+func NewRouter(
+	{{- range .Operations}}
+	{{.VarName}}Handler *{{.OperationID}}Handler,
+	{{- end}}
+) *chi.Mux {
+	r := chi.NewRouter()
+	
+	// Common middleware
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	
+	// Register API endpoints
+	{{- range .Resources}}
+	// {{.Name}} endpoints
+	r.Route("{{.BasePath}}", func(r chi.Router) {
+		{{- range .Operations}}
+		{{.VarName}}Handler.Register(r)
+		{{- end}}
+	})
+	{{- end}}
+	
+	return r
+}
+
+// SetupHTTPServer creates and configures the HTTP server
+func SetupHTTPServer(router *chi.Mux, addr string) *http.Server {
+	return &http.Server{
+		Addr:    addr,
+		Handler: router,
+	}
+}

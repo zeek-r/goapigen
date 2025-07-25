@@ -1,0 +1,499 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"testing"
+	{{- if .ImportTime}}
+	"time"
+	{{- end}}
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"{{.ImportPath}}/internal/pkg/domain"
+	{{.PackageName}} "{{.ImportPath}}"
+)
+
+// Mock{{.SchemaName}}Repository is a mock implementation of {{.SchemaName}}Repository
+type Mock{{.SchemaName}}Repository struct {
+	mock.Mock
+}
+
+{{- if .HasCreateOp}}
+// Create is a mocked implementation
+func (m *Mock{{.SchemaName}}Repository) Create(ctx context.Context, {{.VarName}} *{{.PackageName}}.{{.SchemaName}}) error {
+	args := m.Called(ctx, {{.VarName}})
+	return args.Error(0)
+}
+{{- end}}
+
+{{- if .HasGetOp}}
+// GetByID is a mocked implementation
+func (m *Mock{{.SchemaName}}Repository) GetByID(ctx context.Context, id string) (*{{.PackageName}}.{{.SchemaName}}, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*{{.PackageName}}.{{.SchemaName}}), args.Error(1)
+}
+{{- end}}
+
+{{- if .HasListOp}}
+// List is a mocked implementation
+func (m *Mock{{.SchemaName}}Repository) List(ctx context.Context) ([]*{{.PackageName}}.{{.SchemaName}}, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*{{.PackageName}}.{{.SchemaName}}), args.Error(1)
+}
+{{- end}}
+
+{{- if .HasUpdateOp}}
+// Update is a mocked implementation
+func (m *Mock{{.SchemaName}}Repository) Update(ctx context.Context, {{.VarName}} *{{.PackageName}}.{{.SchemaName}}) error {
+	args := m.Called(ctx, {{.VarName}})
+	return args.Error(0)
+}
+{{- end}}
+
+{{- if .HasDeleteOp}}
+// Delete is a mocked implementation
+func (m *Mock{{.SchemaName}}Repository) Delete(ctx context.Context, id string) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+{{- end}}
+
+{{- if .HasCreateOp}}
+func TestDefault{{.SchemaName}}Service_Create(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Create valid request
+		request := {{.SchemaName}}CreateRequest{
+			{{- range .CreateFields}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+		}
+
+		// Set up expectations
+		mockRepo.On("Create", mock.Anything, mock.MatchedBy(func({{.VarName}} *{{.PackageName}}.{{.SchemaName}}) bool {
+			{{- range .CreateFields}}
+			if {{$.VarName}}.{{.Name}} != request.{{.Name}} {
+				return false
+			}
+			{{- end}}
+			return true
+		})).Return(nil)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		result, err := service.Create(context.Background(), request)
+
+		// Assert expectations
+		assert.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+
+		// Assert result
+		{{- range .CreateFields}}
+		assert.Equal(t, request.{{.Name}}, result.{{.Name}})
+		{{- end}}
+	})
+
+	t.Run("Validation_Error", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Create invalid request
+		request := {{.SchemaName}}CreateRequest{
+			// Missing required fields
+		}
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		_, err := service.Create(context.Background(), request)
+
+		// Assert error
+		assert.Error(t, err)
+		var validationErr *domain.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+
+		// Repository should not be called
+		mockRepo.AssertNotCalled(t, "Create")
+	})
+
+	t.Run("Repository_Error", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Create valid request
+		request := {{.SchemaName}}CreateRequest{
+			{{- range .CreateFields}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+		}
+
+		// Set up expectations
+		repoErr := errors.New("repository error")
+		mockRepo.On("Create", mock.Anything, mock.Anything).Return(repoErr)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		_, err := service.Create(context.Background(), request)
+
+		// Assert error
+		assert.Error(t, err)
+		var internalErr *domain.InternalError
+		assert.True(t, errors.As(err, &internalErr))
+
+		// Repository should be called
+		mockRepo.AssertExpectations(t)
+	})
+}
+{{- end}}
+
+{{- if .HasGetOp}}
+func TestDefault{{.SchemaName}}Service_GetByID(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Test ID
+		testID := "test-id"
+
+		// Mock entity
+		mockEntity := &{{.PackageName}}.{{.SchemaName}}{
+			ID: testID,
+			{{- range .CreateFields}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+		}
+
+		// Set up expectations
+		mockRepo.On("GetByID", mock.Anything, testID).Return(mockEntity, nil)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		result, err := service.GetByID(context.Background(), testID)
+
+		// Assert expectations
+		assert.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+
+		// Assert result
+		assert.Equal(t, testID, result.ID)
+	})
+
+	t.Run("Not_Found", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Test ID
+		testID := "test-id"
+
+		// Set up expectations
+		mockRepo.On("GetByID", mock.Anything, testID).Return(nil, nil)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		_, err := service.GetByID(context.Background(), testID)
+
+		// Assert error
+		assert.Error(t, err)
+		var notFoundErr *domain.NotFoundError
+		assert.True(t, errors.As(err, &notFoundErr))
+
+		// Repository should be called
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("Empty_ID", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		_, err := service.GetByID(context.Background(), "")
+
+		// Assert error
+		assert.Error(t, err)
+		var validationErr *domain.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+
+		// Repository should not be called
+		mockRepo.AssertNotCalled(t, "GetByID")
+	})
+
+	t.Run("Repository_Error", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Test ID
+		testID := "test-id"
+
+		// Set up expectations
+		repoErr := errors.New("repository error")
+		mockRepo.On("GetByID", mock.Anything, testID).Return(nil, repoErr)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		_, err := service.GetByID(context.Background(), testID)
+
+		// Assert error
+		assert.Error(t, err)
+		var internalErr *domain.InternalError
+		assert.True(t, errors.As(err, &internalErr))
+
+		// Repository should be called
+		mockRepo.AssertExpectations(t)
+	})
+}
+{{- end}}
+
+{{- if .HasListOp}}
+func TestDefault{{.SchemaName}}Service_List(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Mock entities
+		mockEntities := []*{{.PackageName}}.{{.SchemaName}}{
+			{
+				ID: "test-id-1",
+				{{- range .CreateFields}}
+				{{.Name}}: {{template "testValue" .}},
+				{{- end}}
+			},
+			{
+				ID: "test-id-2",
+				{{- range .CreateFields}}
+				{{.Name}}: {{template "testValue" .}},
+				{{- end}}
+			},
+		}
+
+		// Set up expectations
+		mockRepo.On("List", mock.Anything).Return(mockEntities, nil)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		result, err := service.List(context.Background())
+
+		// Assert expectations
+		assert.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+
+		// Assert result
+		assert.Len(t, result, 2)
+		assert.Equal(t, "test-id-1", result[0].ID)
+		assert.Equal(t, "test-id-2", result[1].ID)
+	})
+
+	t.Run("Repository_Error", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Set up expectations
+		repoErr := errors.New("repository error")
+		mockRepo.On("List", mock.Anything).Return(nil, repoErr)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		_, err := service.List(context.Background())
+
+		// Assert error
+		assert.Error(t, err)
+		var internalErr *domain.InternalError
+		assert.True(t, errors.As(err, &internalErr))
+
+		// Repository should be called
+		mockRepo.AssertExpectations(t)
+	})
+}
+{{- end}}
+
+{{- if .HasUpdateOp}}
+func TestDefault{{.SchemaName}}Service_Update(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Test ID
+		testID := "test-id"
+
+		// Create valid request
+		request := {{.SchemaName}}UpdateRequest{
+			{{- range .UpdateFields}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+		}
+
+		// Mock existing entity
+		mockEntity := &{{.PackageName}}.{{.SchemaName}}{
+			ID: testID,
+			// Other fields...
+		}
+
+		// Set up expectations
+		mockRepo.On("GetByID", mock.Anything, testID).Return(mockEntity, nil)
+		mockRepo.On("Update", mock.Anything, mock.MatchedBy(func({{.VarName}} *{{.PackageName}}.{{.SchemaName}}) bool {
+			{{- range .UpdateFields}}
+			if {{$.VarName}}.{{.Name}} != request.{{.Name}} {
+				return false
+			}
+			{{- end}}
+			return true
+		})).Return(nil)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		result, err := service.Update(context.Background(), testID, request)
+
+		// Assert expectations
+		assert.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+
+		// Assert result
+		assert.Equal(t, testID, result.ID)
+		{{- range .UpdateFields}}
+		assert.Equal(t, request.{{.Name}}, result.{{.Name}})
+		{{- end}}
+	})
+
+	t.Run("Not_Found", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Test ID
+		testID := "test-id"
+
+		// Create valid request
+		request := {{.SchemaName}}UpdateRequest{
+			{{- range .UpdateFields}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+		}
+
+		// Set up expectations
+		mockRepo.On("GetByID", mock.Anything, testID).Return(nil, nil)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		_, err := service.Update(context.Background(), testID, request)
+
+		// Assert error
+		assert.Error(t, err)
+		var notFoundErr *domain.NotFoundError
+		assert.True(t, errors.As(err, &notFoundErr))
+
+		// Repository Get should be called, but not Update
+		mockRepo.AssertNotCalled(t, "Update")
+	})
+}
+{{- end}}
+
+{{- if .HasDeleteOp}}
+func TestDefault{{.SchemaName}}Service_Delete(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Test ID
+		testID := "test-id"
+
+		// Mock existing entity
+		mockEntity := &{{.PackageName}}.{{.SchemaName}}{
+			ID: testID,
+			// Other fields...
+		}
+
+		// Set up expectations
+		mockRepo.On("GetByID", mock.Anything, testID).Return(mockEntity, nil)
+		mockRepo.On("Delete", mock.Anything, testID).Return(nil)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		err := service.Delete(context.Background(), testID)
+
+		// Assert expectations
+		assert.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("Not_Found", func(t *testing.T) {
+		// Create mock repository
+		mockRepo := new(Mock{{.SchemaName}}Repository)
+
+		// Test ID
+		testID := "test-id"
+
+		// Set up expectations
+		mockRepo.On("GetByID", mock.Anything, testID).Return(nil, nil)
+
+		// Create service
+		service := New{{.SchemaName}}Service(mockRepo)
+
+		// Execute test
+		err := service.Delete(context.Background(), testID)
+
+		// Assert error
+		assert.Error(t, err)
+		var notFoundErr *domain.NotFoundError
+		assert.True(t, errors.As(err, &notFoundErr))
+
+		// Repository Get should be called, but not Delete
+		mockRepo.AssertNotCalled(t, "Delete")
+	})
+}
+{{- end}}
+
+{{define "testValue"}}
+{{- if eq .Type "string" -}}
+"test-value"
+{{- else if eq .Type "int" -}}
+42
+{{- else if eq .Type "int32" -}}
+int32(42)
+{{- else if eq .Type "int64" -}}
+int64(42)
+{{- else if eq .Type "float32" -}}
+float32(42.0)
+{{- else if eq .Type "float64" -}}
+42.0
+{{- else if eq .Type "bool" -}}
+true
+{{- else if eq .Type "time.Time" -}}
+time.Now()
+{{- else if contains .Type "[]" -}}
+nil
+{{- else -}}
+{{.Type}}{}
+{{- end -}}
+{{end}}
+

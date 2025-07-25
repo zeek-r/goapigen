@@ -1,0 +1,314 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	{{- if .ImportTime}}
+	"time"
+	{{- end}}
+
+	"{{.ImportPath}}/internal/pkg/domain"
+)
+
+// {{.SchemaName}}Service defines operations for {{.SchemaName}} entities
+type {{.SchemaName}}Service interface {
+	{{- if .HasCreateOp}}
+	Create(ctx context.Context, request {{.SchemaName}}CreateRequest) (domain.{{.SchemaName}}, error)
+	{{- end}}
+	{{- if .HasGetOp}}
+	GetByID(ctx context.Context, id string) (domain.{{.SchemaName}}, error)
+	{{- end}}
+	{{- if .HasListOp}}
+	List(ctx context.Context) ([]domain.{{.SchemaName}}, error)
+	{{- end}}
+	{{- if .HasUpdateOp}}
+	Update(ctx context.Context, id string, request {{.SchemaName}}UpdateRequest) (domain.{{.SchemaName}}, error)
+	{{- end}}
+	{{- if .HasDeleteOp}}
+	Delete(ctx context.Context, id string) error
+	{{- end}}
+}
+
+// {{.SchemaName}}CreateRequest represents a request to create a {{.SchemaName}}
+type {{.SchemaName}}CreateRequest struct {
+	{{- range .CreateFields}}
+	{{.Name}} {{.Type}} `json:"{{.JsonTag}}"`
+	{{- end}}
+}
+
+{{- if .HasUpdateOp}}
+// {{.SchemaName}}UpdateRequest represents a request to update a {{.SchemaName}}
+type {{.SchemaName}}UpdateRequest struct {
+	{{- range .UpdateFields}}
+	{{.Name}} {{.Type}} `json:"{{.JsonTag}}"`
+	{{- end}}
+}
+{{- end}}
+
+// Default{{.SchemaName}}Service is the default implementation of {{.SchemaName}}Service
+type Default{{.SchemaName}}Service struct {
+	repo {{.SchemaName}}Repository
+}
+
+// {{.SchemaName}}Repository defines repository operations for {{.SchemaName}} entities
+type {{.SchemaName}}Repository interface {
+	{{- if .HasCreateOp}}
+	Create(ctx context.Context, {{.VarName}} *domain.{{.SchemaName}}) error
+	{{- end}}
+	{{- if .HasGetOp}}
+	GetByID(ctx context.Context, id string) (*domain.{{.SchemaName}}, error)
+	{{- end}}
+	{{- if .HasListOp}}
+	List(ctx context.Context) ([]*domain.{{.SchemaName}}, error)
+	{{- end}}
+	{{- if .HasUpdateOp}}
+	Update(ctx context.Context, {{.VarName}} *domain.{{.SchemaName}}) error
+	{{- end}}
+	{{- if .HasDeleteOp}}
+	Delete(ctx context.Context, id string) error
+	{{- end}}
+}
+
+// New{{.SchemaName}}Service creates a new {{.SchemaName}} service
+func New{{.SchemaName}}Service(repo {{.SchemaName}}Repository) {{.SchemaName}}Service {
+	return &Default{{.SchemaName}}Service{
+		repo: repo,
+	}
+}
+
+{{- if .HasCreateOp}}
+// Create creates a new {{.SchemaName}}
+func (s *Default{{.SchemaName}}Service) Create(ctx context.Context, request {{.SchemaName}}CreateRequest) (domain.{{.SchemaName}}, error) {
+	// Validate request
+	validationErrors := []string{}
+
+	{{- range .RequiredFields}}
+	// Validate required fields
+	{{- if eq .Type "string"}}
+	if request.{{.Name}} == "" {
+		validationErrors = append(validationErrors, "{{.JsonTag}} is required")
+	}
+	{{- else}}
+	// Non-string required field: {{.JsonTag}}
+	{{- end}}
+	{{- end}}
+
+	{{- range .EnumFields}}
+	// Validate enum fields
+	{{- if eq .Type "string"}}
+	validValues{{.Name}} := []string{{"{"}}{{range $i, $e := .Values}}{{if $i}}, {{end}}"{{$e}}"{{end}}{{"}"}}
+	{{.Name}}Valid := false
+	for _, val := range validValues{{.Name}} {
+		if request.{{.Name}} == val {
+			{{.Name}}Valid = true
+			break
+		}
+	}
+	if !{{.Name}}Valid && request.{{.Name}} != "" {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be one of: %s", strings.Join(validValues{{.Name}}, ", ")))
+	}
+	{{- end}}
+	{{- end}}
+
+	{{- range .MinMaxFields}}
+	// Validate min/max constraints
+	{{- if eq .Type "string"}}
+	if len(request.{{.Name}}) < {{.Min}} {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be at least %d characters long", {{.Min}}))
+	}
+	{{- if .HasMax}}
+	if len(request.{{.Name}}) > {{.Max}} {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be at most %d characters long", {{.Max}}))
+	}
+	{{- end}}
+	{{- else}}
+	if request.{{.Name}} < {{.Min}} {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be at least %v", {{.Min}}))
+	}
+	{{- if .HasMax}}
+	if request.{{.Name}} > {{.Max}} {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be at most %v", {{.Max}}))
+	}
+	{{- end}}
+	{{- end}}
+	{{- end}}
+
+	if len(validationErrors) > 0 {
+		return domain.{{.SchemaName}}{}, domain.NewValidationError(strings.Join(validationErrors, "; "))
+	}
+
+	// Create entity
+	entity := domain.{{.SchemaName}}{
+		{{- range .CreateFields}}
+		{{.Name}}: request.{{.Name}},
+		{{- end}}
+		{{- if .HasCreatedAt}}
+		CreatedAt: time.Now(),
+		{{- end}}
+		{{- if .HasUpdatedAt}}
+		UpdatedAt: time.Now(),
+		{{- end}}
+	}
+
+	// Call repository
+	if err := s.repo.Create(ctx, &entity); err != nil {
+		return domain.{{.SchemaName}}{}, domain.NewInternalError("failed to create {{.SchemaName}}", err)
+	}
+
+	return entity, nil
+}
+{{- end}}
+
+{{- if .HasGetOp}}
+// GetByID retrieves a {{.SchemaName}} by its ID
+func (s *Default{{.SchemaName}}Service) GetByID(ctx context.Context, id string) (domain.{{.SchemaName}}, error) {
+	// Validate ID
+	if id == "" {
+		return domain.{{.SchemaName}}{}, domain.NewValidationError("id is required")
+	}
+
+	// Call repository
+	entity, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return domain.{{.SchemaName}}{}, domain.NewInternalError("failed to get {{.SchemaName}}", err)
+	}
+
+	// Handle not found
+	if entity == nil {
+		return domain.{{.SchemaName}}{}, domain.NewNotFoundError("{{.SchemaName}}", id)
+	}
+
+	return *entity, nil
+}
+{{- end}}
+
+{{- if .HasListOp}}
+// List retrieves all {{.SchemaName}} entities
+func (s *Default{{.SchemaName}}Service) List(ctx context.Context) ([]domain.{{.SchemaName}}, error) {
+	// Call repository
+	entities, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, domain.NewInternalError("failed to list {{.SchemaName}}s", err)
+	}
+
+	// Convert pointer slice to value slice
+	result := make([]domain.{{.SchemaName}}, len(entities))
+	for i, entity := range entities {
+		result[i] = *entity
+	}
+
+	return result, nil
+}
+{{- end}}
+
+{{- if .HasUpdateOp}}
+// Update updates a {{.SchemaName}} by its ID
+func (s *Default{{.SchemaName}}Service) Update(ctx context.Context, id string, request {{.SchemaName}}UpdateRequest) (domain.{{.SchemaName}}, error) {
+	// Validate ID
+	if id == "" {
+		return domain.{{.SchemaName}}{}, domain.NewValidationError("id is required")
+	}
+
+	// Validate request
+	validationErrors := []string{}
+
+	{{- range .EnumFields}}
+	// Validate enum fields
+	{{- if eq .Type "string"}}
+	validValues{{.Name}} := []string{{"{"}}{{range $i, $e := .Values}}{{if $i}}, {{end}}"{{$e}}"{{end}}{{"}"}}
+	{{.Name}}Valid := false
+	for _, val := range validValues{{.Name}} {
+		if request.{{.Name}} == val {
+			{{.Name}}Valid = true
+			break
+		}
+	}
+	if !{{.Name}}Valid && request.{{.Name}} != "" {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be one of: %s", strings.Join(validValues{{.Name}}, ", ")))
+	}
+	{{- end}}
+	{{- end}}
+
+	{{- range .MinMaxFields}}
+	// Validate min/max constraints
+	{{- if eq .Type "string"}}
+	if len(request.{{.Name}}) < {{.Min}} {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be at least %d characters long", {{.Min}}))
+	}
+	{{- if .HasMax}}
+	if len(request.{{.Name}}) > {{.Max}} {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be at most %d characters long", {{.Max}}))
+	}
+	{{- end}}
+	{{- else}}
+	if request.{{.Name}} < {{.Min}} {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be at least %v", {{.Min}}))
+	}
+	{{- if .HasMax}}
+	if request.{{.Name}} > {{.Max}} {
+		validationErrors = append(validationErrors, fmt.Sprintf("{{.JsonTag}} must be at most %v", {{.Max}}))
+	}
+	{{- end}}
+	{{- end}}
+	{{- end}}
+
+	if len(validationErrors) > 0 {
+		return domain.{{.SchemaName}}{}, domain.NewValidationError(strings.Join(validationErrors, "; "))
+	}
+
+	// Get current entity
+	currentEntity, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return domain.{{.SchemaName}}{}, domain.NewInternalError("failed to get {{.SchemaName}}", err)
+	}
+
+	// Handle not found
+	if currentEntity == nil {
+		return domain.{{.SchemaName}}{}, domain.NewNotFoundError("{{.SchemaName}}", id)
+	}
+
+	// Update fields
+	{{- range .UpdateFields}}
+	currentEntity.{{.Name}} = request.{{.Name}}
+	{{- end}}
+	{{- if .HasUpdatedAt}}
+	currentEntity.UpdatedAt = time.Now()
+	{{- end}}
+
+	// Call repository
+	if err := s.repo.Update(ctx, currentEntity); err != nil {
+		return domain.{{.SchemaName}}{}, domain.NewInternalError("failed to update {{.SchemaName}}", err)
+	}
+
+	return *currentEntity, nil
+}
+{{- end}}
+
+{{- if .HasDeleteOp}}
+// Delete removes a {{.SchemaName}} by its ID
+func (s *Default{{.SchemaName}}Service) Delete(ctx context.Context, id string) error {
+	// Validate ID
+	if id == "" {
+		return domain.NewValidationError("id is required")
+	}
+
+	// Verify entity exists
+	entity, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return domain.NewInternalError("failed to get {{.SchemaName}}", err)
+	}
+
+	// Handle not found
+	if entity == nil {
+		return domain.NewNotFoundError("{{.SchemaName}}", id)
+	}
+
+	// Call repository
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return domain.NewInternalError("failed to delete {{.SchemaName}}", err)
+	}
+
+	return nil
+}
+{{- end}}

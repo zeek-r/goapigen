@@ -1,0 +1,153 @@
+package {{.RepoPackage}}
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	
+	"{{.ImportPath}}/internal/pkg/domain"
+)
+
+// {{.SchemaName}}Repository defines operations for working with {{.SchemaName}} entities
+type {{.SchemaName}}Repository interface {
+{{- if .HasCreateOp}}
+	Create(ctx context.Context, {{.VarName}} *domain.{{.SchemaName}}) error
+{{- end}}
+{{- if .HasGetOp}}
+	GetByID(ctx context.Context, id string) (*domain.{{.SchemaName}}, error)
+{{- end}}
+{{- if .HasListOp}}
+	List(ctx context.Context) ([]*domain.{{.SchemaName}}, error)
+{{- end}}
+{{- if .HasUpdateOp}}
+	Update(ctx context.Context, {{.VarName}} *domain.{{.SchemaName}}) error
+{{- end}}
+{{- if .HasDeleteOp}}
+	Delete(ctx context.Context, id string) error
+{{- end}}
+	Exists(ctx context.Context, id string) (bool, error)
+	Count(ctx context.Context, filter interface{}) (int64, error)
+}
+
+// {{.SchemaName}}MongoRepository is a MongoDB implementation of {{.SchemaName}}Repository
+type {{.SchemaName}}MongoRepository struct {
+	collection *mongo.Collection
+}
+
+// New{{.SchemaName}}Repository creates a new MongoDB repository for {{.SchemaName}} entities
+func New{{.SchemaName}}Repository(db *mongo.Database) {{.SchemaName}}Repository {
+	return &{{.SchemaName}}MongoRepository{
+		collection: db.Collection("{{.CollectionName}}"),
+	}
+}
+
+{{- if .HasCreateOp}}
+// Create adds a new {{.SchemaName}} to the database
+func (r *{{.SchemaName}}MongoRepository) Create(ctx context.Context, {{.VarName}} *domain.{{.SchemaName}}) error {
+	{{- if .HasCreatedAt}}
+	// Set creation timestamp
+	{{.VarName}}.CreatedAt = time.Now()
+	{{- end}}
+	
+	_, err := r.collection.InsertOne(ctx, {{.VarName}})
+	return err
+}
+{{- end}}
+
+{{- if .HasGetOp}}
+// GetByID retrieves a {{.SchemaName}} by its ID
+func (r *{{.SchemaName}}MongoRepository) GetByID(ctx context.Context, id string) (*domain.{{.SchemaName}}, error) {
+	var {{.VarName}} domain.{{.SchemaName}}
+	err := r.collection.FindOne(ctx, bson.M{"id": id}).Decode(&{{.VarName}})
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &{{.VarName}}, nil
+}
+{{- end}}
+
+{{- if .HasListOp}}
+// List retrieves all {{.SchemaName}} entities
+func (r *{{.SchemaName}}MongoRepository) List(ctx context.Context) ([]*domain.{{.SchemaName}}, error) {
+	var {{.PluralVarName}} []*domain.{{.SchemaName}}
+	
+	cursor, err := r.collection.Find(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var {{.VarName}} domain.{{.SchemaName}}
+		if err := cursor.Decode(&{{.VarName}}); err != nil {
+			return nil, err
+		}
+		{{.PluralVarName}} = append({{.PluralVarName}}, &{{.VarName}})
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	return {{.PluralVarName}}, nil
+}
+{{- end}}
+
+{{- if .HasUpdateOp}}
+// Update modifies an existing {{.SchemaName}}
+func (r *{{.SchemaName}}MongoRepository) Update(ctx context.Context, {{.VarName}} *domain.{{.SchemaName}}) error {
+	{{- if .HasUpdatedAt}}
+	// Set updated timestamp
+	{{.VarName}}.UpdatedAt = time.Now()
+	{{- end}}
+	
+	filter := bson.M{"id": {{.VarName}}.ID}
+	result, err := r.collection.ReplaceOne(ctx, filter, {{.VarName}})
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("{{.SchemaName}} not found")
+	}
+
+	return nil
+}
+{{- end}}
+
+{{- if .HasDeleteOp}}
+// Delete removes a {{.SchemaName}} by ID
+func (r *{{.SchemaName}}MongoRepository) Delete(ctx context.Context, id string) error {
+	result, err := r.collection.DeleteOne(ctx, bson.M{"id": id})
+	if err != nil {
+		return err
+	}
+
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("{{.SchemaName}} not found")
+	}
+
+	return nil
+}
+{{- end}}
+
+// Exists checks if a {{.SchemaName}} with the given ID exists
+func (r *{{.SchemaName}}MongoRepository) Exists(ctx context.Context, id string) (bool, error) {
+	count, err := r.collection.CountDocuments(ctx, bson.M{"id": id})
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
+// Count returns the number of {{.SchemaName}} entities matching the filter
+func (r *{{.SchemaName}}MongoRepository) Count(ctx context.Context, filter interface{}) (int64, error) {
+	return r.collection.CountDocuments(ctx, filter)
+}

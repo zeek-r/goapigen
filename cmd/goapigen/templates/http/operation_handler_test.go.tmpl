@@ -1,0 +1,669 @@
+package {{.HandlerPackage}}
+
+{{- if eq .Method "POST"}}
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	{{- if .ImportTime}}
+	"time"
+	{{- end}}
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"{{.ImportPath}}/internal/pkg/domain"
+	"{{.ImportPath}}/internal/services/{{.Domain}}"
+	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
+	{{.PackageName}} "{{.ModelImportPath}}"
+)
+
+{{- else if and (eq .Method "GET") (contains .Path "{id}")}}
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	{{- if .ImportTime}}
+	"time"
+	{{- end}}
+
+	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"{{.ImportPath}}/internal/pkg/domain"
+	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
+	{{.PackageName}} "{{.ModelImportPath}}"
+)
+
+{{- else if eq .Method "GET" }}
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	{{- if .ImportTime}}
+	"time"
+	{{- end}}
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"{{.ImportPath}}/internal/pkg/domain"
+	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
+	{{.PackageName}} "{{.ModelImportPath}}"
+)
+
+{{- else if eq .Method "PUT" }}
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	{{- if .ImportTime}}
+	"time"
+	{{- end}}
+
+	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"{{.ImportPath}}/internal/pkg/domain"
+	"{{.ImportPath}}/internal/services/{{.Domain}}"
+	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
+	{{.PackageName}} "{{.ModelImportPath}}"
+)
+
+{{- else if eq .Method "DELETE" }}
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	{{- if .ImportTime}}
+	"time"
+	{{- end}}
+
+	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"{{.ImportPath}}/internal/pkg/domain"
+	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
+)
+{{- end }}
+
+{{- if eq .Method "POST"}}
+func Test{{.OperationID}}Handler_Handle(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create test data
+		testEntity := {{.PackageName}}.{{.SchemaName}}{
+			ID: "test-id",
+			{{- range .RequestFields}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+		}
+		
+		// Create expected request
+		expectedRequest := service.{{.SchemaName}}CreateRequest{
+			{{- range .RequestFields}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+		}
+		
+		// Set up mock expectations
+		mockService.On("Create", mock.Anything, expectedRequest).Return(testEntity, nil)
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		requestBody, err := json.Marshal(map[string]interface{}{
+			{{- range .RequestFields}}
+			"{{.JsonTag}}": {{template "testJSON" .}},
+			{{- end}}
+		})
+		require.NoError(t, err)
+		
+		req := httptest.NewRequest("POST", "{{.Path}}", bytes.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
+		
+		// Parse response
+		var response {{.PackageName}}.{{.SchemaName}}
+		err = json.Unmarshal(rr.Body.Bytes(), &response)
+		require.NoError(t, err)
+		
+		// Verify response
+		assert.Equal(t, testEntity.ID, response.ID)
+		{{- range .RequestFields}}
+		assert.Equal(t, testEntity.{{.Name}}, response.{{.Name}})
+		{{- end}}
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+	
+	t.Run("Invalid_JSON", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create invalid JSON request
+		req := httptest.NewRequest("POST", "{{.Path}}", bytes.NewReader([]byte("invalid json")))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		
+		// Service should not be called
+		mockService.AssertNotCalled(t, "Create")
+	})
+	
+	t.Run("Service_Error", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Set up mock to return error
+		mockService.On("Create", mock.Anything, mock.Anything).Return(
+			{{.PackageName}}.{{.SchemaName}}{}, 
+			domain.NewValidationError("test validation error"))
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		requestBody, err := json.Marshal(map[string]interface{}{
+			{{- range .RequestFields}}
+			"{{.JsonTag}}": {{template "testJSON" .}},
+			{{- end}}
+		})
+		require.NoError(t, err)
+		
+		req := httptest.NewRequest("POST", "{{.Path}}", bytes.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+}
+{{- else if and (eq .Method "GET") (contains .Path "{id}")}}
+func Test{{.OperationID}}Handler_Handle(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create test data
+		testID := "test-id"
+		testEntity := {{.PackageName}}.{{.SchemaName}}{
+			ID: testID,
+			{{- range .RequestFields}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+		}
+		
+		// Set up mock expectations
+		mockService.On("GetByID", mock.Anything, testID).Return(testEntity, nil)
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		req := httptest.NewRequest("GET", "/ignored", nil)
+		rr := httptest.NewRecorder()
+		
+		// Setup chi router context with URL parameters
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("id", testID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
+		
+		// Parse response
+		var response {{.PackageName}}.{{.SchemaName}}
+		err := json.Unmarshal(rr.Body.Bytes(), &response)
+		require.NoError(t, err)
+		
+		// Verify response
+		assert.Equal(t, testEntity.ID, response.ID)
+		{{- range .RequestFields}}
+		assert.Equal(t, testEntity.{{.Name}}, response.{{.Name}})
+		{{- end}}
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+	
+	t.Run("Not_Found", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create test data
+		testID := "test-id"
+		
+		// Set up mock expectations
+		mockService.On("GetByID", mock.Anything, testID).Return(
+			{{.PackageName}}.{{.SchemaName}}{},
+			domain.NewNotFoundError("{{.SchemaName}}", testID))
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		req := httptest.NewRequest("GET", "/ignored", nil)
+		rr := httptest.NewRecorder()
+		
+		// Setup chi router context with URL parameters
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("id", testID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+}
+{{- else if eq .Method "GET"}}
+func Test{{.OperationID}}Handler_Handle(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create test data
+		testEntities := []{{.PackageName}}.{{.SchemaName}}{
+			{
+				ID: "test-id-1",
+				{{- range .RequestFields}}
+				{{.Name}}: {{template "testValue" .}},
+				{{- end}}
+			},
+			{
+				ID: "test-id-2",
+				{{- range .RequestFields}}
+				{{.Name}}: {{template "testValue" .}},
+				{{- end}}
+			},
+		}
+		
+		// Set up mock expectations
+		mockService.On("List", mock.Anything).Return(testEntities, nil)
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		req := httptest.NewRequest("GET", "{{.Path}}", nil)
+		rr := httptest.NewRecorder()
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
+		
+		// Parse response
+		var response []{{.PackageName}}.{{.SchemaName}}
+		err := json.Unmarshal(rr.Body.Bytes(), &response)
+		require.NoError(t, err)
+		
+		// Verify response
+		assert.Len(t, response, 2)
+		assert.Equal(t, "test-id-1", response[0].ID)
+		assert.Equal(t, "test-id-2", response[1].ID)
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+	
+	t.Run("Service_Error", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Set up mock to return error
+		mockService.On("List", mock.Anything).Return(
+			[]{{.PackageName}}.{{.SchemaName}}{},
+			domain.NewInternalError("test internal error", nil))
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		req := httptest.NewRequest("GET", "{{.Path}}", nil)
+		rr := httptest.NewRecorder()
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+}
+{{- else if eq .Method "PUT"}}
+func Test{{.OperationID}}Handler_Handle(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create test data
+		testID := "test-id"
+		testEntity := {{.PackageName}}.{{.SchemaName}}{
+			ID: testID,
+			{{- range .RequestFields}}
+			{{- if ne .Name "ID"}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+			{{- end}}
+		}
+		
+		// Create expected request
+		expectedRequest := service.{{.SchemaName}}UpdateRequest{
+			{{- range .RequestFields}}
+			{{- if and (ne .Name "CreatedAt") (ne .Name "UpdatedAt")}}
+			{{.Name}}: {{template "testValue" .}},
+			{{- end}}
+			{{- end}}
+		}
+		
+		// Set up mock expectations
+		mockService.On("Update", mock.Anything, testID, expectedRequest).Return(testEntity, nil)
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		requestBody, err := json.Marshal(map[string]interface{}{
+			{{- range .RequestFields}}
+			{{- if and (ne .Name "CreatedAt") (ne .Name "UpdatedAt")}}
+			"{{.JsonTag}}": {{template "testJSON" .}},
+			{{- end}}
+			{{- end}}
+		})
+		require.NoError(t, err)
+		
+		req := httptest.NewRequest("PUT", "/ignored", bytes.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		
+		// Setup chi router context with URL parameters
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("id", testID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
+		
+		// Parse response
+		var response {{.PackageName}}.{{.SchemaName}}
+		err = json.Unmarshal(rr.Body.Bytes(), &response)
+		require.NoError(t, err)
+		
+		// Verify response
+		assert.Equal(t, testEntity.ID, response.ID)
+		{{- range .RequestFields}}
+		{{- if ne .Name "ID"}}
+		assert.Equal(t, testEntity.{{.Name}}, response.{{.Name}})
+		{{- end}}
+		{{- end}}
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+	
+	t.Run("Invalid_JSON", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create invalid JSON request
+		req := httptest.NewRequest("PUT", "/ignored", bytes.NewReader([]byte("invalid json")))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		
+		// Setup chi router context with URL parameters
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("id", "test-id")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		
+		// Service should not be called
+		mockService.AssertNotCalled(t, "Update")
+	})
+	
+	t.Run("Not_Found", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create test data
+		testID := "test-id"
+		
+		// Set up mock expectations
+		mockService.On("Update", mock.Anything, testID, mock.Anything).Return(
+			{{.PackageName}}.{{.SchemaName}}{},
+			domain.NewNotFoundError("{{.SchemaName}}", testID))
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		requestBody, err := json.Marshal(map[string]interface{}{
+			{{- range .RequestFields}}
+			{{- if and (ne .Name "CreatedAt") (ne .Name "UpdatedAt")}}
+			"{{.JsonTag}}": {{template "testJSON" .}},
+			{{- end}}
+			{{- end}}
+		})
+		require.NoError(t, err)
+		
+		req := httptest.NewRequest("PUT", "/ignored", bytes.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		
+		// Setup chi router context with URL parameters
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("id", testID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+}
+{{- else if eq .Method "DELETE"}}
+func Test{{.OperationID}}Handler_Handle(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create test data
+		testID := "test-id"
+		
+		// Set up mock expectations
+		mockService.On("Delete", mock.Anything, testID).Return(nil)
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		req := httptest.NewRequest("DELETE", "/ignored", nil)
+		rr := httptest.NewRecorder()
+		
+		// Setup chi router context with URL parameters
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("id", testID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+	
+	t.Run("Not_Found", func(t *testing.T) {
+		// Create mock service
+		mockService := new(mocks.Mock{{.SchemaName}}Service)
+		
+		// Create test data
+		testID := "test-id"
+		
+		// Set up mock expectations
+		mockService.On("Delete", mock.Anything, testID).Return(
+			domain.NewNotFoundError("{{.SchemaName}}", testID))
+		
+		// Create handler
+		handler := New{{.OperationID}}Handler(mockService)
+		
+		// Create HTTP request
+		req := httptest.NewRequest("DELETE", "/ignored", nil)
+		rr := httptest.NewRecorder()
+		
+		// Setup chi router context with URL parameters
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("id", testID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+		
+		// Execute request
+		handler.Handle()(rr, req)
+		
+		// Assert response
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+		
+		// Verify expectations
+		mockService.AssertExpectations(t)
+	})
+}
+{{- end}}
+
+{{- define "testValue" -}}
+{{- if eq .Type "string" -}}
+"test-string"
+{{- else if eq .Type "int" -}}
+123
+{{- else if eq .Type "int32" -}}
+int32(123)
+{{- else if eq .Type "int64" -}}
+int64(123)
+{{- else if eq .Type "float32" -}}
+float32(123.45)
+{{- else if eq .Type "float64" -}}
+123.45
+{{- else if eq .Type "bool" -}}
+true
+{{- else if eq .Type "time.Time" -}}
+time.Now()
+{{- else if eq .Type "[]string" -}}
+[]string{"test1", "test2"}
+{{- else if eq .Type "[]int" -}}
+[]int{1, 2, 3}
+{{- else if eq .Type "[]int32" -}}
+[]int32{1, 2, 3}
+{{- else if eq .Type "[]int64" -}}
+[]int64{1, 2, 3}
+{{- else if eq .Type "[]float64" -}}
+[]float64{1.1, 2.2, 3.3}
+{{- else if eq .Type "[]bool" -}}
+[]bool{true, false}
+{{- else if eq .Type "map[string]interface{}" -}}
+map[string]interface{}{"key": "value"}
+{{- else if eq .Type "map[string]string" -}}
+map[string]string{"key": "value"}
+{{- else -}}
+{{.Type}}{}
+{{- end -}}
+{{- end -}}
+
+{{- define "testJSON" -}}
+{{- if eq .Type "string" -}}
+"test-string"
+{{- else if eq .Type "int" -}}
+123
+{{- else if eq .Type "int32" -}}
+123
+{{- else if eq .Type "int64" -}}
+123
+{{- else if eq .Type "float32" -}}
+123.45
+{{- else if eq .Type "float64" -}}
+123.45
+{{- else if eq .Type "bool" -}}
+true
+{{- else if eq .Type "time.Time" -}}
+"2023-01-01T00:00:00Z"
+{{- else if eq .Type "[]string" -}}
+["test1", "test2"]
+{{- else if eq .Type "[]int" -}}
+[1, 2, 3]
+{{- else if eq .Type "[]int32" -}}
+[1, 2, 3]
+{{- else if eq .Type "[]int64" -}}
+[1, 2, 3]
+{{- else if eq .Type "[]float64" -}}
+[1.1, 2.2, 3.3]
+{{- else if eq .Type "[]bool" -}}
+[true, false]
+{{- else if eq .Type "map[string]interface{}" -}}
+{"key": "value"}
+{{- else if eq .Type "map[string]string" -}}
+{"key": "value"}
+{{- else -}}
+{}
+{{- end -}}
+{{- end -}}
+

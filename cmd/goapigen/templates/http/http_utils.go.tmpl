@@ -1,0 +1,131 @@
+package httputil
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"{{.ImportPath}}/internal/pkg/domain"
+)
+
+// HTTPError represents an error with HTTP status code
+type HTTPError interface {
+	error
+	StatusCode() int
+	ErrorMessage() string
+}
+
+// DefaultHTTPError is a basic implementation of HTTPError
+type DefaultHTTPError struct {
+	Status  int    `json:"-"`
+	Message string `json:"message"`
+	Err     error  `json:"-"`
+}
+
+func (e DefaultHTTPError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Message, e.Err)
+	}
+	return e.Message
+}
+
+func (e DefaultHTTPError) StatusCode() int {
+	return e.Status
+}
+
+func (e DefaultHTTPError) ErrorMessage() string {
+	return e.Message
+}
+
+// Common error creators for convenience
+func ErrNotFound(message string, err error) HTTPError {
+	return DefaultHTTPError{
+		Status:  http.StatusNotFound,
+		Message: message,
+		Err:     err,
+	}
+}
+
+func ErrBadRequest(message string, err error) HTTPError {
+	return DefaultHTTPError{
+		Status:  http.StatusBadRequest,
+		Message: message,
+		Err:     err,
+	}
+}
+
+func ErrServerError(message string, err error) HTTPError {
+	return DefaultHTTPError{
+		Status:  http.StatusInternalServerError,
+		Message: message,
+		Err:     err,
+	}
+}
+
+func ErrUnauthorized(message string, err error) HTTPError {
+	return DefaultHTTPError{
+		Status:  http.StatusUnauthorized,
+		Message: message,
+		Err:     err,
+	}
+}
+
+func ErrForbidden(message string, err error) HTTPError {
+	return DefaultHTTPError{
+		Status:  http.StatusForbidden,
+		Message: message,
+		Err:     err,
+	}
+}
+
+func ErrConflict(message string, err error) HTTPError {
+	return DefaultHTTPError{
+		Status:  http.StatusConflict,
+		Message: message,
+		Err:     err,
+	}
+}
+
+// MapDomainErrorToHTTP maps a domain error to an HTTP error
+func MapDomainErrorToHTTP(err error) HTTPError {
+	switch e := err.(type) {
+	case *domain.NotFoundError:
+		return ErrNotFound(e.Error(), nil)
+	case *domain.ValidationError:
+		return ErrBadRequest(e.Error(), nil)
+	case *domain.BadRequestError:
+		return ErrBadRequest(e.Error(), e.Err)
+	case *domain.ConflictError:
+		return ErrConflict(e.Error(), nil)
+	case *domain.UnauthorizedError:
+		return ErrUnauthorized(e.Error(), nil)
+	case *domain.ForbiddenError:
+		return ErrForbidden(e.Error(), nil)
+	case *domain.InternalError:
+		return ErrServerError(e.Error(), e.Err)
+	default:
+		return ErrServerError("Internal server error", err)
+	}
+}
+
+// SendError sends a standardized error response
+func SendError(res http.ResponseWriter, err HTTPError) {
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(err.StatusCode())
+	
+	errorResponse := struct {
+		Status  int    `json:"status"`
+		Message string `json:"message"`
+	}{
+		Status:  err.StatusCode(),
+		Message: err.ErrorMessage(),
+	}
+	
+	json.NewEncoder(res).Encode(errorResponse)
+}
+
+// URLParam gets a URL parameter from the request context
+func URLParam(r *http.Request, key string) string {
+	return chi.URLParam(r, key)
+}

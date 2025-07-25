@@ -1,0 +1,92 @@
+package {{.RepoPackage}}
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"{{.ImportPath}}"
+)
+
+// Mock MongoDB client for testing
+func setupTestDB(t *testing.T) (*mongo.Database, func()) {
+	t.Helper()
+	
+	// This is just a test stub - in a real app, you'd use a MongoDB test container
+	// or a mocking library. This function won't actually be called in tests.
+	return nil, func() {}
+}
+
+func Test{{.SchemaName}}Repository_Basic(t *testing.T) {
+	t.Skip("This is a generated test stub - implement with real tests")
+	
+	// Setup would create a test database
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+	
+	// Create the repository
+	repo := {{.RepoPackage}}.New{{.SchemaName}}Repository(db)
+	
+	// Create a test entity
+	test{{.SchemaName}} := &{{.PackageName}}.{{.SchemaName}}{
+		ID: "test-id",
+		{{range .TestFields}}
+		{{.Name}}: {{.TestValue}},
+		{{end}}
+	}
+	
+	// Test basic CRUD operations
+	{{if .HasCreateOp}}
+	t.Run("Create", func(t *testing.T) {
+		err := repo.Create(context.Background(), test{{.SchemaName}})
+		assert.NoError(t, err)
+	})
+	{{end}}
+	
+	{{if .HasGetOp}}
+	t.Run("GetByID", func(t *testing.T) {
+		result, err := repo.GetByID(context.Background(), "test-id")
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+	{{end}}
+	
+	{{if .HasListOp}}
+	t.Run("List", func(t *testing.T) {
+		filter := bson.M{}
+		results, err := repo.List(context.Background(), filter)
+		assert.NoError(t, err)
+		assert.NotNil(t, results)
+	})
+	{{end}}
+	
+	{{if .HasUpdateOp}}
+	t.Run("Update", func(t *testing.T) {
+		err := repo.Update(context.Background(), test{{.SchemaName}})
+		assert.NoError(t, err)
+	})
+	{{end}}
+	
+	{{if .HasDeleteOp}}
+	t.Run("Delete", func(t *testing.T) {
+		err := repo.Delete(context.Background(), "test-id")
+		assert.NoError(t, err)
+	})
+	{{end}}
+	
+	t.Run("Exists", func(t *testing.T) {
+		exists, err := repo.Exists(context.Background(), "test-id")
+		assert.NoError(t, err)
+		assert.True(t, exists)
+	})
+	
+	t.Run("Count", func(t *testing.T) {
+		count, err := repo.Count(context.Background(), bson.M{})
+		assert.NoError(t, err)
+		assert.GreaterOrEqual(t, count, int64(0))
+	})
+}

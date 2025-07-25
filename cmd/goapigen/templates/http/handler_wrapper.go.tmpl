@@ -1,0 +1,149 @@
+package httputil
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"reflect"
+)
+
+// HandlerConfig provides configuration options for the handler wrapper
+type HandlerConfig struct {
+	// ResponseModifierFunc modifies the response before sending
+	ResponseModifierFunc func(interface{}) (interface{}, error)
+}
+
+// HandlerWrapper provides a generic wrapper for HTTP handlers
+type HandlerWrapper struct {
+	config HandlerConfig
+}
+
+// NewHandlerWrapper creates a new handler wrapper with the given configuration
+func NewHandlerWrapper(config HandlerConfig) *HandlerWrapper {
+	return &HandlerWrapper{
+		config: config,
+	}
+}
+
+// DefaultHandlerWrapper returns a handler wrapper with default configuration
+func DefaultHandlerWrapper() *HandlerWrapper {
+	return &HandlerWrapper{
+		config: HandlerConfig{},
+	}
+}
+
+// WrapHandler wraps a handler function to provide common HTTP processing
+//
+// The wrapped function should focus only on translating to/from domain types
+// and calling the appropriate service methods. This wrapper handles:
+//   - Reading and parsing request body
+//   - Error handling and mapping domain errors to HTTP responses
+//   - Response serialization
+func (w *HandlerWrapper) WrapHandler(
+	handlerFunc func(r *http.Request, input interface{}) (interface{}, error),
+	successStatus int,
+	requestType interface{}, // Pass nil if no request body expected
+) http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		res.Header().Set("Content-Type", "application/json")
+
+		// Parse input if request type is provided and we have a body
+		var input interface{}
+		var err error
+		if requestType != nil && req.Body != nil && req.ContentLength > 0 {
+			input, err = w.parseRequestBody(req, requestType)
+			if err != nil {
+				// Convert to HTTPError if it's not already
+				var httpErr HTTPError
+				if !errors.As(err, &httpErr) {
+					httpErr = ErrBadRequest(err.Error(), err)
+				}
+				SendError(res, httpErr)
+				return
+			}
+		} else if requestType != nil {
+			// Create a new instance of the request type
+			inputType := reflect.TypeOf(requestType)
+			input = reflect.New(inputType).Interface()
+		}
+
+		// Execute handler function
+		result, err := handlerFunc(req, input)
+		if err != nil {
+			// Map domain errors to HTTP errors
+			var httpErr HTTPError
+			if errors.As(err, &httpErr) {
+				SendError(res, httpErr)
+			} else {
+				SendError(res, MapDomainErrorToHTTP(err))
+			}
+			return
+		}
+
+		// Apply response modifier if configured
+		if w.config.ResponseModifierFunc != nil && result != nil {
+			var err error
+			result, err = w.config.ResponseModifierFunc(result)
+			if err != nil {
+				var httpErr HTTPError
+				if !errors.As(err, &httpErr) {
+					httpErr = MapDomainErrorToHTTP(err)
+				}
+				SendError(res, httpErr)
+				return
+			}
+		}
+
+		// Set success status code
+		if successStatus != 0 {
+			res.WriteHeader(successStatus)
+		} else {
+			res.WriteHeader(http.StatusOK)
+		}
+        
+		// Handle empty response for specific status codes
+		if result == nil {
+			// For certain status codes, it's normal to have no response body
+			if successStatus == http.StatusNoContent || 
+			   successStatus == http.StatusAccepted ||
+			   successStatus == http.StatusResetContent {
+				return // No response body needed
+			}
+			return // Still return with the set status code but no body
+		}
+
+		// Encode and send response
+		if err := json.NewEncoder(res).Encode(result); err != nil {
+			// At this point we've already written the status, so we can't change it
+			// Just log the error or handle it appropriately
+			return
+		}
+	}
+}
+
+// parseRequestBody parses the request body into the given type
+func (w *HandlerWrapper) parseRequestBody(req *http.Request, typeTemplate interface{}) (interface{}, error) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, ErrBadRequest("Failed to read request body", err)
+	}
+	defer req.Body.Close()
+
+	// Create a new instance of the request type
+	inputType := reflect.TypeOf(typeTemplate)
+	input := reflect.New(inputType).Interface()
+
+	// Unmarshal JSON
+	if err := json.Unmarshal(body, &input); err != nil {
+		return nil, ErrBadRequest("Failed to parse request body", err)
+	}
+
+	// Get the actual value (not pointer)
+	value := reflect.ValueOf(input)
+	if value.Kind() == reflect.Ptr && !value.IsNil() {
+		value = value.Elem()
+	}
+
+	return value.Interface(), nil
+}
