@@ -123,9 +123,10 @@ goapigen/
 - ✅ **Benchmark tests** for performance measurement and validation
 - ✅ **README documentation** updated with comprehensive testing and quality sections
 
-### 🚧 **In Progress**
-- 🔄 **Generator test coverage enhancement** - fixing template path issues in tests
-- 🔄 **End-to-end testing** - complete API functionality with real HTTP requests
+### 🚧 **In Progress - Major Architecture Fix Required**
+- 🔄 **Critical Init Command Fix** - `--init` generates main.go with imports to non-existent packages
+- 🔄 **Project Structure Refactor** - Move main.go to cmd/{project}/ directory (Go standard)
+- 🔄 **Routes Generation Strategy** - Split into stable main.go + regenerated routes.go
 
 ### ⬜ **Pending Tasks**
 - ⬜ Test complete API functionality with real requests and MongoDB operations
@@ -268,24 +269,69 @@ The tool supports several command-line options:
 
 ## Current Development Focus
 
+### **Critical Issue Identified**
+The `--init` command has a fundamental flaw: it generates `main.go` with imports to packages that don't exist unless other flags (`--mongo`, `--http`) are also specified. This makes the generated project uncompilable when using only `--init`.
+
+**Root Cause**: The main.go template assumes all components are present and imports:
+- `orderRepository "project/internal/adapters/mongo/order"`  
+- `orderHandler "project/internal/adapters/http/order"`
+- `petRepository "project/internal/adapters/mongo/pet"`
+- `petHandler "project/internal/adapters/http/pet"`
+
+But `--init` only generates services, not the imported packages.
+
 ### **Immediate Priority**
-1. **Fix generator test coverage** - Resolve template path issues in test suite
-2. **End-to-end testing** - Complete API functionality validation with real requests
+1. **Fix Init Command Strategy** - `--init` should only generate basic server infrastructure
+2. **Implement Routes File Pattern** - Separate stable main.go from regenerated routes.go  
+3. **Move to cmd/{project}/ Structure** - Follow Go community standards
+
+### **Proposed Solution Architecture**
+
+#### **New Init Strategy (`--init` only):**
+- **Basic server setup** - Chi router, middleware, CORS, graceful shutdown
+- **Configuration management** - .env loading, environment variables  
+- **Health check endpoint** - Simple `/health` route
+- **Helper utilities** - HTTP utilities, error handling foundations
+- **Project structure** - Directory scaffolding for future additions
+- **NO domain-specific imports** - Avoid importing handlers/repos that don't exist
+
+#### **File Organization (Go Standard):**
+```
+generated-project/
+├── cmd/
+│   └── {project}/        # Main application directory
+│       ├── main.go       # Stable server infrastructure (never overwrite)
+│       └── routes.go     # Generated route registration (always regenerate)
+├── internal/             # Private application code
+├── go.mod               
+├── .env                 
+└── README.md            
+```
+
+#### **Route Management Strategy:**
+- **main.go**: Stable infrastructure code (server setup, shutdown, middleware)
+- **routes.go**: Generated routing code with conditional imports/registration
+- **Conditional mounting**: Only register routes for components that exist
 
 ### **Next Planned Features**
-1. **Validation utilities** - Based on OpenAPI schema constraints
-2. **Middleware support** - Custom route configuration and authentication patterns
-3. **Enhanced error handling** - More sophisticated response formatting
-4. **Documentation generation** - API docs from OpenAPI specs
-5. **Database migrations** - Schema versioning and migration support
-6. **Performance optimizations** - Caching and connection pooling
+1. **Fix critical init command** - Implement new architecture above
+2. **Generator test coverage** - Fix template path issues  
+3. **Validation utilities** - Based on OpenAPI schema constraints
+4. **Enhanced error handling** - More sophisticated response formatting
+5. **Documentation generation** - API docs from OpenAPI specs
 
 ### **Future Enhancements**
 - Authentication and authorization patterns
-- Multiple database backend support (PostgreSQL, MySQL)
+- Multiple database backend support (PostgreSQL, MySQL)  
 - gRPC service generation
 - WebSocket support
 - Metrics and observability integration
+
+### **Current Status Summary**
+- ✅ **Code generation works** for complete flag combinations (`--init --types --mongo --http`)
+- ❌ **Init command broken** when used alone - generates uncompilable main.go
+- 🎯 **Solution identified** - New architecture with cmd/{project}/ and routes.go pattern
+- 🚧 **Implementation needed** - Refactor init strategy and file organization
 
 ## Testing Infrastructure & Results
 
