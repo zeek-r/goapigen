@@ -418,18 +418,48 @@ generated-project/
 
 ## Recent Major Updates
 
-### **Go 1.24 Migration & Testing Infrastructure (Latest)**
-- **Upgraded to Go 1.24** with latest language features and standard library improvements
-- **Added testify dependency** for modern assertion patterns and better test readability
-- **Comprehensive test suite overhaul** with table-driven tests and extensive coverage
-- **Created `internal/testutil` package** with reusable test helpers and mock OpenAPI specifications
-- **Parser tests completely rewritten** with benchmark coverage and error message validation
-- **Resolved import cycle issues** between testing utilities and core packages
-- **Enhanced README documentation** with detailed testing, quality assurance, and development setup sections
-- **All tests passing with improved coverage** and performance validation
+### **Major Architectural Overhaul & Route Registration Fix (Latest - Dec 2024)**
+- **CRITICAL FIX: Route Registration 404 Issue** - Resolved path duplication that caused `/pets/pets` instead of `/pets`
+- **Simplified handler delegation** - Modified templates to pass router from top instead of mounting
+- **New cmd/{project}/ structure** - Adopted Go standard project layout for better organization  
+- **Three-file architecture**: `main.go` (stable), `routes.go` (regenerated), `database.go` (connections)
+- **Database.go generation fix** - Resolved missing database file generation issue
+- **Routes refresh capability** - Fixed issue where routes.go wasn't updating with HTTP handler changes
+- **Template data consistency** - Fixed HasHandler=false bug preventing proper conditional generation
+- **Eliminated redundant mounting** - Removed complex handler collections and loops
+- **Clean dependency injection** - Services properly wired to handlers with correct interfaces
+- **End-to-end API functionality** - Generated APIs now respond (404→500, indicating route found)
+
+### **Current Status: Functional but Fragile**
+✅ **Working Features:**
+- Complete OpenAPI → Go API generation pipeline
+- All files generate without compilation errors
+- Route registration works (endpoints accessible)
+- Clean architectural separation
+- Database connections and service setup
+
+⚠️ **Current Issues:**
+- **500 errors in API responses** (handler/service logic issues)
+- **Fragile refactoring** - Small changes break multiple components
+- **Limited integration testing** - Architectural changes not validated end-to-end
+- **Complex CLI logic** - main.go needs refactoring for maintainability
 
 ### **Git Repository Status**
-- **Clean working tree** with all improvements committed
-- **Comprehensive commit history** documenting each improvement phase
-- **Professional README** reflecting the quality and capabilities of the project
-- **Updated documentation** in both README.md and CLAUDE.md files
+- **Latest commits**: Route registration fixes and architectural improvements pushed
+- **14 files changed** in latest commit with significant template improvements
+- **Architecture stable** but needs integration testing before further changes
+
+## Next Priority: Stability & Testing
+
+### **Immediate Goals**
+1. **Refactor cmd/goapigen/main.go** - Break down 600+ line main function into smaller, testable functions
+2. **Create integration tests** - End-to-end testing to catch architectural breakages early
+3. **Fix 500 API errors** - Resolve handler/service logic issues preventing proper API responses
+4. **Add regression testing** - Ensure template changes don't break generation pipeline
+
+### **Refactoring Strategy**
+- Extract CLI flag parsing into separate function
+- Create modular generation pipeline (init, types, services, http, etc.)
+- Add integration test suite that generates and compiles sample projects
+- Implement golden file testing for template outputs
+- Add validation steps between generation phases
