@@ -1,0 +1,161 @@
+package logger
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/bool64/ctxd"
+	"go.uber.org/zap/zapcore"
+)
+
+func TestNew(t *testing.T) {
+	logger := New()
+	if logger == nil {
+		t.Fatal("Logger should not be nil")
+	}
+
+	// Test that logging works
+	ctx := context.Background()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Basic logging panicked: %v", r)
+		}
+	}()
+	logger.Info(ctx, "production logger initialized")
+}
+
+func TestNewDevelopment(t *testing.T) {
+	logger := NewDevelopment()
+	if logger == nil {
+		t.Fatal("Logger should not be nil")
+	}
+
+	// Test that logging works
+	ctx := context.Background()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Development logging panicked: %v", r)
+		}
+	}()
+	logger.Info(ctx, "development logger initialized")
+}
+
+func TestNewWithConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		development bool
+		level       zapcore.Level
+	}{
+		{"production_info", false, zapcore.InfoLevel},
+		{"development_debug", true, zapcore.DebugLevel},
+		{"production_error", false, zapcore.ErrorLevel},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := NewWithConfig(tt.development, tt.level)
+			if logger == nil {
+				t.Fatal("Logger should not be nil")
+			}
+
+			// Test that logging works
+			ctx := context.Background()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("Config logging panicked: %v", r)
+				}
+			}()
+			logger.Info(ctx, "config logger initialized")
+		})
+	}
+}
+
+func TestNewFromEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		logLevel string
+		logDev   string
+	}{
+		{"default", "", ""},
+		{"debug_level", "debug", ""},
+		{"development", "", "true"},
+		{"both", "warn", "true"},
+		{"invalid_level", "invalid", ""}, // Should fall back to default
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variables
+			if tt.logLevel != "" {
+				os.Setenv("LOG_LEVEL", tt.logLevel)
+				defer os.Unsetenv("LOG_LEVEL")
+			}
+			if tt.logDev != "" {
+				os.Setenv("LOG_DEVELOPMENT", tt.logDev)
+				defer os.Unsetenv("LOG_DEVELOPMENT")
+			}
+
+			logger := NewFromEnv()
+			if logger == nil {
+				t.Fatal("Logger should not be nil")
+			}
+
+			// Test that logging works
+			ctx := context.Background()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("Env logging panicked: %v", r)
+				}
+			}()
+			logger.Info(ctx, "env logger initialized")
+		})
+	}
+}
+
+func TestLoggerFunctions(t *testing.T) {
+	// Setup logger
+	logger := NewDevelopment()
+	if logger == nil {
+		t.Fatal("Logger should not be nil")
+	}
+
+	ctx := context.Background()
+
+	// Test basic logging functions - these should not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Logging panicked: %v", r)
+		}
+	}()
+
+	logger.Debug(ctx, "debug message", "key", "value")
+	logger.Info(ctx, "info message", "key", "value")
+	logger.Warn(ctx, "warn message", "key", "value")
+	logger.Error(ctx, "error message", "key", "value")
+	logger.Important(ctx, "important message", "key", "value")
+}
+
+func TestLoggerWithFields(t *testing.T) {
+	logger := NewDevelopment()
+	if logger == nil {
+		t.Fatal("Logger should not be nil")
+	}
+
+	ctx := context.Background()
+
+	// Add fields to context
+	ctx = ctxd.AddFields(ctx,
+		"request_id", "123",
+		"user_id", "456",
+		"operation", "test")
+
+	// Test logging with context fields
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Logging with fields panicked: %v", r)
+		}
+	}()
+
+	logger.Info(ctx, "test message with context fields")
+} 

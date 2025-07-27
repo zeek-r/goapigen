@@ -201,6 +201,8 @@ func main() {
 			"github.com/go-chi/cors",
 			"github.com/joho/godotenv",
 			"go.mongodb.org/mongo-driver/mongo",
+			"github.com/bool64/ctxd",
+			"github.com/bool64/zapctxd",
 		}
 
 		for _, dep := range deps {
@@ -272,6 +274,58 @@ func main() {
 				}
 			} else {
 				fmt.Printf("Domain errors file already exists. Skipping (use --overwrite to force overwrite)\n")
+			}
+		}
+	}
+
+	// Generate logger package (automatically with --init)
+	if *initProject {
+		loggerDir := filepath.Join(*outputDir, "internal/pkg/logger")
+		if err := os.MkdirAll(loggerDir, 0755); err != nil {
+			fmt.Printf("Error creating logger directory: %v\n", err)
+		} else {
+			// Generate logger.go
+			loggerTemplate, err := template.ParseFS(templateFS, "templates/pkg/logger.go.tmpl")
+			if err != nil {
+				fmt.Printf("Error parsing logger template: %v\n", err)
+			} else {
+				var loggerBuf bytes.Buffer
+				if err := loggerTemplate.Execute(&loggerBuf, nil); err != nil {
+					fmt.Printf("Error executing logger template: %v\n", err)
+				} else {
+					loggerDest := filepath.Join(loggerDir, "logger.go")
+					if _, err := os.Stat(loggerDest); os.IsNotExist(err) || *overwrite {
+						if err := os.WriteFile(loggerDest, loggerBuf.Bytes(), 0644); err != nil {
+							fmt.Printf("Error writing logger file: %v\n", err)
+						} else {
+							fmt.Printf("Generated logger in %s\n", loggerDest)
+						}
+					} else {
+						fmt.Printf("Logger file already exists. Skipping (use --overwrite to force overwrite)\n")
+					}
+				}
+			}
+
+			// Generate logger_test.go
+			loggerTestTemplate, err := template.ParseFS(templateFS, "templates/pkg/logger_test.go.tmpl")
+			if err != nil {
+				fmt.Printf("Error parsing logger test template: %v\n", err)
+			} else {
+				var loggerTestBuf bytes.Buffer
+				if err := loggerTestTemplate.Execute(&loggerTestBuf, nil); err != nil {
+					fmt.Printf("Error executing logger test template: %v\n", err)
+				} else {
+					loggerTestDest := filepath.Join(loggerDir, "logger_test.go")
+					if _, err := os.Stat(loggerTestDest); os.IsNotExist(err) || *overwrite {
+						if err := os.WriteFile(loggerTestDest, loggerTestBuf.Bytes(), 0644); err != nil {
+							fmt.Printf("Error writing logger test file: %v\n", err)
+						} else {
+							fmt.Printf("Generated logger tests in %s\n", loggerTestDest)
+						}
+					} else {
+						fmt.Printf("Logger test file already exists. Skipping (use --overwrite to force overwrite)\n")
+					}
+				}
 			}
 		}
 	}
