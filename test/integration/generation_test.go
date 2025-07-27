@@ -67,7 +67,8 @@ func TestEndToEndGeneration(t *testing.T) {
 
 func buildGoapigenBinary(t *testing.T) string {
 	binaryPath := filepath.Join(t.TempDir(), "goapigen")
-	cmd := exec.Command("go", "build", "-o", binaryPath, "../../cmd/goapigen")
+	// Build from the root directory since main.go now imports cmd/goapigen
+	cmd := exec.Command("go", "build", "-o", binaryPath, "../..")
 	require.NoError(t, cmd.Run(), "Failed to build goapigen binary")
 	return binaryPath
 }
