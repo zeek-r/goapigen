@@ -64,11 +64,12 @@ type OperationData struct {
 
 // ResourceData represents a resource group in the API
 type ResourceData struct {
-	Name       string
-	BasePath   string
-	Operations []OperationData
-	Domain     string
-	ImportPath string
+	Name           string
+	BasePath       string
+	Operations     []OperationData
+	Domain         string
+	ImportPath     string
+	HandlerPackage string
 }
 
 // RouterData contains data for router generation
@@ -226,11 +227,12 @@ func (g *HTTPGenerator) GenerateHandlers() (map[string]string, error) {
 		basePath := "/" + strings.ToLower(name)
 
 		resourceData := ResourceData{
-			Name:       ToPascalCase(name),
-			BasePath:   basePath,
-			Operations: ops,
-			Domain:     strings.ToLower(name),
-			ImportPath: g.importPath,
+			Name:           ToPascalCase(name),
+			BasePath:       basePath,
+			Operations:     ops,
+			Domain:         strings.ToLower(name),
+			ImportPath:     g.importPath,
+			HandlerPackage: g.handlerPackage,
 		}
 		resources = append(resources, resourceData)
 
