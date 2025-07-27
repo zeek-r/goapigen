@@ -2,8 +2,7 @@
 package logger
 
 import (
-	"os"
-
+	"{{.ImportPath}}/internal/pkg/config"
 	"github.com/bool64/ctxd"
 	"github.com/bool64/zapctxd"
 	"go.uber.org/zap/zapcore"
@@ -29,21 +28,23 @@ func NewWithConfig(development bool, level zapcore.Level) ctxd.Logger {
 	return zapctxd.New(config)
 }
 
-// NewFromEnv creates and returns a logger based on environment variables
-// LOG_LEVEL: debug, info, warn, error (default: info)
-// LOG_DEVELOPMENT: true, false (default: false)
-func NewFromEnv() ctxd.Logger {
-	level := zapcore.InfoLevel
-	if levelStr := os.Getenv("LOG_LEVEL"); levelStr != "" {
-		if parsedLevel, err := zapcore.ParseLevel(levelStr); err == nil {
-			level = parsedLevel
-		}
+// NewFromConfig creates and returns a logger from application config
+func NewFromConfig(cfg *config.Config) ctxd.Logger {
+	zapConfig := zapctxd.Config{
+		Level:   cfg.GetLogLevel(),
+		DevMode: cfg.Logging.Development,
 	}
 
-	development := false
-	if devStr := os.Getenv("LOG_DEVELOPMENT"); devStr == "true" {
-		development = true
+	return zapctxd.New(zapConfig)
+}
+
+// NewFromEnv creates and returns a logger based on application configuration
+// This is a convenience function that loads config and creates logger
+func NewFromEnv() (ctxd.Logger, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
 	}
 
-	return NewWithConfig(development, level)
+	return NewFromConfig(cfg), nil
 } 

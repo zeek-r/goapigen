@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"{{.ImportPath}}/internal/pkg/config"
 	"github.com/bool64/ctxd"
 	"go.uber.org/zap/zapcore"
 )
@@ -71,17 +72,42 @@ func TestNewWithConfig(t *testing.T) {
 	}
 }
 
+func TestNewFromConfig(t *testing.T) {
+	cfg := &config.Config{
+		Logging: config.LoggingConfig{
+			Level:       "debug",
+			Development: true,
+			Format:      "console",
+		},
+	}
+
+	logger := NewFromConfig(cfg)
+	if logger == nil {
+		t.Fatal("Logger should not be nil")
+	}
+
+	// Test that logging works
+	ctx := context.Background()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Config-based logging panicked: %v", r)
+		}
+	}()
+	logger.Info(ctx, "config-based logger initialized")
+}
+
 func TestNewFromEnv(t *testing.T) {
 	tests := []struct {
 		name     string
 		logLevel string
 		logDev   string
+		wantErr  bool
 	}{
-		{"default", "", ""},
-		{"debug_level", "debug", ""},
-		{"development", "", "true"},
-		{"both", "warn", "true"},
-		{"invalid_level", "invalid", ""}, // Should fall back to default
+		{"default", "", "", false},
+		{"debug_level", "debug", "", false},
+		{"development", "", "true", false},
+		{"both", "warn", "true", false},
+		{"invalid_level", "invalid", "", false}, // Should fall back to default
 	}
 
 	for _, tt := range tests {
@@ -96,19 +122,25 @@ func TestNewFromEnv(t *testing.T) {
 				defer os.Unsetenv("LOG_DEVELOPMENT")
 			}
 
-			logger := NewFromEnv()
-			if logger == nil {
-				t.Fatal("Logger should not be nil")
+			logger, err := NewFromEnv()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("NewFromEnv() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			// Test that logging works
-			ctx := context.Background()
-			defer func() {
-				if r := recover(); r != nil {
-					t.Fatalf("Env logging panicked: %v", r)
+			if !tt.wantErr {
+				if logger == nil {
+					t.Fatal("Logger should not be nil")
 				}
-			}()
-			logger.Info(ctx, "env logger initialized")
+
+				// Test that logging works
+				ctx := context.Background()
+				defer func() {
+					if r := recover(); r != nil {
+						t.Fatalf("Env logging panicked: %v", r)
+					}
+				}()
+				logger.Info(ctx, "env logger initialized")
+			}
 		})
 	}
 }

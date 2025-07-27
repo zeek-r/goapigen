@@ -1,0 +1,194 @@
+package config
+
+import (
+	"os"
+	"testing"
+
+	"go.uber.org/zap/zapcore"
+)
+
+func TestLoad(t *testing.T) {
+	// Test with default values
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Test defaults
+	if config.Server.Port != "8080" {
+		t.Errorf("Expected default port 8080, got %s", config.Server.Port)
+	}
+	if config.Server.Host != "localhost" {
+		t.Errorf("Expected default host localhost, got %s", config.Server.Host)
+	}
+	if config.Database.MongoURI != "mongodb://localhost:27017" {
+		t.Errorf("Expected default mongo URI, got %s", config.Database.MongoURI)
+	}
+	if config.Logging.Level != "info" {
+		t.Errorf("Expected default log level info, got %s", config.Logging.Level)
+	}
+	if config.Logging.Development != false {
+		t.Errorf("Expected default development false, got %v", config.Logging.Development)
+	}
+	if config.Logging.Format != "json" {
+		t.Errorf("Expected default format json, got %s", config.Logging.Format)
+	}
+}
+
+func TestLoadWithEnvVars(t *testing.T) {
+	// Set environment variables
+	envVars := map[string]string{
+		"PORT":           "9000",
+		"HOST":           "0.0.0.0",
+		"MONGO_URI":      "mongodb://custom:27017",
+		"DB_NAME":        "custom_db",
+		"LOG_LEVEL":      "debug",
+		"LOG_DEVELOPMENT": "true",
+		"LOG_FORMAT":     "console",
+	}
+
+	// Set env vars
+	for key, value := range envVars {
+		os.Setenv(key, value)
+		defer os.Unsetenv(key) // Clean up
+	}
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Test overridden values
+	if config.Server.Port != "9000" {
+		t.Errorf("Expected port 9000, got %s", config.Server.Port)
+	}
+	if config.Server.Host != "0.0.0.0" {
+		t.Errorf("Expected host 0.0.0.0, got %s", config.Server.Host)
+	}
+	if config.Database.MongoURI != "mongodb://custom:27017" {
+		t.Errorf("Expected custom mongo URI, got %s", config.Database.MongoURI)
+	}
+	if config.Database.DBName != "custom_db" {
+		t.Errorf("Expected custom_db, got %s", config.Database.DBName)
+	}
+	if config.Logging.Level != "debug" {
+		t.Errorf("Expected debug log level, got %s", config.Logging.Level)
+	}
+	if config.Logging.Development != true {
+		t.Errorf("Expected development true, got %v", config.Logging.Development)
+	}
+	if config.Logging.Format != "console" {
+		t.Errorf("Expected format console, got %s", config.Logging.Format)
+	}
+}
+
+func TestValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  *Config
+		wantErr bool
+	}{
+		{
+			name: "valid config",
+			config: &Config{
+				Server:   ServerConfig{Port: "8080", Host: "localhost"},
+				Database: DatabaseConfig{MongoURI: "mongodb://localhost:27017", DBName: "test"},
+				Logging:  LoggingConfig{Level: "info", Development: false, Format: "json"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty port",
+			config: &Config{
+				Server:   ServerConfig{Port: "", Host: "localhost"},
+				Database: DatabaseConfig{MongoURI: "mongodb://localhost:27017", DBName: "test"},
+				Logging:  LoggingConfig{Level: "info", Development: false, Format: "json"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty mongo URI",
+			config: &Config{
+				Server:   ServerConfig{Port: "8080", Host: "localhost"},
+				Database: DatabaseConfig{MongoURI: "", DBName: "test"},
+				Logging:  LoggingConfig{Level: "info", Development: false, Format: "json"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty DB name",
+			config: &Config{
+				Server:   ServerConfig{Port: "8080", Host: "localhost"},
+				Database: DatabaseConfig{MongoURI: "mongodb://localhost:27017", DBName: ""},
+				Logging:  LoggingConfig{Level: "info", Development: false, Format: "json"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid log format",
+			config: &Config{
+				Server:   ServerConfig{Port: "8080", Host: "localhost"},
+				Database: DatabaseConfig{MongoURI: "mongodb://localhost:27017", DBName: "test"},
+				Logging:  LoggingConfig{Level: "info", Development: false, Format: "invalid"},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestGetLogLevel(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected zapcore.Level
+	}{
+		{"debug", zapcore.DebugLevel},
+		{"DEBUG", zapcore.DebugLevel},
+		{"info", zapcore.InfoLevel},
+		{"INFO", zapcore.InfoLevel},
+		{"warn", zapcore.WarnLevel},
+		{"warning", zapcore.WarnLevel},
+		{"WARN", zapcore.WarnLevel},
+		{"error", zapcore.ErrorLevel},
+		{"ERROR", zapcore.ErrorLevel},
+		{"fatal", zapcore.FatalLevel},
+		{"panic", zapcore.PanicLevel},
+		{"invalid", zapcore.InfoLevel}, // Default fallback
+		{"", zapcore.InfoLevel},        // Default fallback
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			config := &Config{
+				Logging: LoggingConfig{Level: tt.input},
+			}
+			result := config.GetLogLevel()
+			if result != tt.expected {
+				t.Errorf("GetLogLevel() for %s = %v, expected %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetServerAddr(t *testing.T) {
+	config := &Config{
+		Server: ServerConfig{
+			Port: "9000",
+			Host: "0.0.0.0",
+		},
+	}
+
+	expected := "0.0.0.0:9000"
+	result := config.GetServerAddr()
+	if result != expected {
+		t.Errorf("GetServerAddr() = %s, expected %s", result, expected)
+	}
+} 

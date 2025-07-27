@@ -1,0 +1,108 @@
+// Package config provides structured configuration loading with environment variable support
+package config
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/kelseyhightower/envconfig"
+	"go.uber.org/zap/zapcore"
+)
+
+// Config holds all application configuration
+type Config struct {
+	// Server configuration
+	Server ServerConfig `envconfig:"SERVER"`
+	
+	// Database configuration
+	Database DatabaseConfig `envconfig:"DATABASE"`
+	
+	// Logging configuration
+	Logging LoggingConfig `envconfig:"LOGGING"`
+}
+
+// ServerConfig holds server-related configuration
+type ServerConfig struct {
+	Port string `envconfig:"PORT" default:"8080"`
+	Host string `envconfig:"HOST" default:"localhost"`
+}
+
+// DatabaseConfig holds database-related configuration
+type DatabaseConfig struct {
+	MongoURI string `envconfig:"MONGO_URI" default:"mongodb://localhost:27017"`
+	DBName   string `envconfig:"DB_NAME" default:"{{.ProjectName}}"`
+}
+
+// LoggingConfig holds logging-related configuration
+type LoggingConfig struct {
+	Level       string `envconfig:"LOG_LEVEL" default:"info"`
+	Development bool   `envconfig:"LOG_DEVELOPMENT" default:"false"`
+	Format      string `envconfig:"LOG_FORMAT" default:"json"` // "json" or "console"
+}
+
+// Load loads configuration from environment variables with sensible defaults
+func Load() (*Config, error) {
+	var config Config
+	
+	// Load configuration from environment variables
+	if err := envconfig.Process("", &config); err != nil {
+		return nil, fmt.Errorf("failed to process environment variables: %w", err)
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	return &config, nil
+}
+
+// Validate validates the configuration
+func (c *Config) Validate() error {
+	if c.Server.Port == "" {
+		return fmt.Errorf("server port cannot be empty")
+	}
+
+	if c.Database.MongoURI == "" {
+		return fmt.Errorf("mongo URI cannot be empty")
+	}
+
+	if c.Database.DBName == "" {
+		return fmt.Errorf("database name cannot be empty")
+	}
+
+	if c.Logging.Format != "json" && c.Logging.Format != "console" {
+		return fmt.Errorf("log format must be 'json' or 'console', got: %s", c.Logging.Format)
+	}
+
+	return nil
+}
+
+// GetServerAddr returns the complete server address
+func (c *Config) GetServerAddr() string {
+	return fmt.Sprintf("%s:%s", c.Server.Host, c.Server.Port)
+}
+
+// GetLogLevel returns the parsed zapcore.Level from the string configuration
+func (c *Config) GetLogLevel() zapcore.Level {
+	return parseLogLevel(c.Logging.Level)
+}
+
+// parseLogLevel parses log level string to zapcore.Level
+func parseLogLevel(level string) zapcore.Level {
+	switch strings.ToLower(level) {
+	case "debug":
+		return zapcore.DebugLevel
+	case "info":
+		return zapcore.InfoLevel
+	case "warn", "warning":
+		return zapcore.WarnLevel
+	case "error":
+		return zapcore.ErrorLevel
+	case "fatal":
+		return zapcore.FatalLevel
+	case "panic":
+		return zapcore.PanicLevel
+	default:
+		return zapcore.InfoLevel // Default fallback
+	}
+} 

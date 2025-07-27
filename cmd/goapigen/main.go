@@ -203,6 +203,7 @@ func main() {
 			"go.mongodb.org/mongo-driver/mongo",
 			"github.com/bool64/ctxd",
 			"github.com/bool64/zapctxd",
+			"github.com/kelseyhightower/envconfig",
 		}
 
 		for _, dep := range deps {
@@ -278,22 +279,79 @@ func main() {
 		}
 	}
 
-	// Generate logger package (automatically with --init)
+	// Generate config and logger packages (automatically with --init)
 	if *initProject {
-		loggerDir := filepath.Join(*outputDir, "internal/pkg/logger")
+		// Template data for both config and logger
+		templateData := map[string]interface{}{
+			"ImportPath":  importPath,
+			"ProjectName": filepath.Base(targetModuleName),
+		}
+
+		// Generate config package
+		configDir := filepath.Join(*outputDir, config.ConfigDir)
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			fmt.Printf("Error creating config directory: %v\n", err)
+		} else {
+			// Generate config.go
+			configTemplate, err := template.ParseFS(templateFS, config.ConfigTemplate)
+			if err != nil {
+				fmt.Printf("Error parsing config template: %v\n", err)
+			} else {
+				var configBuf bytes.Buffer
+				if err := configTemplate.Execute(&configBuf, templateData); err != nil {
+					fmt.Printf("Error executing config template: %v\n", err)
+				} else {
+					configDest := filepath.Join(configDir, config.ConfigFile)
+					if _, err := os.Stat(configDest); os.IsNotExist(err) || *overwrite {
+						if err := os.WriteFile(configDest, configBuf.Bytes(), 0644); err != nil {
+							fmt.Printf("Error writing config file: %v\n", err)
+						} else {
+							fmt.Printf("Generated config in %s\n", configDest)
+						}
+					} else {
+						fmt.Printf("Config file already exists. Skipping (use --overwrite to force overwrite)\n")
+					}
+				}
+			}
+
+			// Generate config_test.go
+			configTestTemplate, err := template.ParseFS(templateFS, config.ConfigTestTemplate)
+			if err != nil {
+				fmt.Printf("Error parsing config test template: %v\n", err)
+			} else {
+				var configTestBuf bytes.Buffer
+				if err := configTestTemplate.Execute(&configTestBuf, templateData); err != nil {
+					fmt.Printf("Error executing config test template: %v\n", err)
+				} else {
+					configTestDest := filepath.Join(configDir, config.ConfigTestFile)
+					if _, err := os.Stat(configTestDest); os.IsNotExist(err) || *overwrite {
+						if err := os.WriteFile(configTestDest, configTestBuf.Bytes(), 0644); err != nil {
+							fmt.Printf("Error writing config test file: %v\n", err)
+						} else {
+							fmt.Printf("Generated config tests in %s\n", configTestDest)
+						}
+					} else {
+						fmt.Printf("Config test file already exists. Skipping (use --overwrite to force overwrite)\n")
+					}
+				}
+			}
+		}
+
+		// Generate logger package
+		loggerDir := filepath.Join(*outputDir, config.LoggerDir)
 		if err := os.MkdirAll(loggerDir, 0755); err != nil {
 			fmt.Printf("Error creating logger directory: %v\n", err)
 		} else {
 			// Generate logger.go
-			loggerTemplate, err := template.ParseFS(templateFS, "templates/pkg/logger.go.tmpl")
+			loggerTemplate, err := template.ParseFS(templateFS, config.LoggerTemplate)
 			if err != nil {
 				fmt.Printf("Error parsing logger template: %v\n", err)
 			} else {
 				var loggerBuf bytes.Buffer
-				if err := loggerTemplate.Execute(&loggerBuf, nil); err != nil {
+				if err := loggerTemplate.Execute(&loggerBuf, templateData); err != nil {
 					fmt.Printf("Error executing logger template: %v\n", err)
 				} else {
-					loggerDest := filepath.Join(loggerDir, "logger.go")
+					loggerDest := filepath.Join(loggerDir, config.LoggerFile)
 					if _, err := os.Stat(loggerDest); os.IsNotExist(err) || *overwrite {
 						if err := os.WriteFile(loggerDest, loggerBuf.Bytes(), 0644); err != nil {
 							fmt.Printf("Error writing logger file: %v\n", err)
@@ -307,15 +365,15 @@ func main() {
 			}
 
 			// Generate logger_test.go
-			loggerTestTemplate, err := template.ParseFS(templateFS, "templates/pkg/logger_test.go.tmpl")
+			loggerTestTemplate, err := template.ParseFS(templateFS, config.LoggerTestTemplate)
 			if err != nil {
 				fmt.Printf("Error parsing logger test template: %v\n", err)
 			} else {
 				var loggerTestBuf bytes.Buffer
-				if err := loggerTestTemplate.Execute(&loggerTestBuf, nil); err != nil {
+				if err := loggerTestTemplate.Execute(&loggerTestBuf, templateData); err != nil {
 					fmt.Printf("Error executing logger test template: %v\n", err)
 				} else {
-					loggerTestDest := filepath.Join(loggerDir, "logger_test.go")
+					loggerTestDest := filepath.Join(loggerDir, config.LoggerTestFile)
 					if _, err := os.Stat(loggerTestDest); os.IsNotExist(err) || *overwrite {
 						if err := os.WriteFile(loggerTestDest, loggerTestBuf.Bytes(), 0644); err != nil {
 							fmt.Printf("Error writing logger test file: %v\n", err)
