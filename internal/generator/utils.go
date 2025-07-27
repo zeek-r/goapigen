@@ -8,19 +8,24 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// Common case conversion functions
+type BaseStruct struct{}
 
+func (b *BaseStruct) Lower(s string) string {
+	return strings.ToLower(s)
+}
+
+// Common case conversion functions
 // ToSnakeCase converts a string to snake_case
 func ToSnakeCase(s string) string {
 	var result strings.Builder
-	
+
 	for i, r := range s {
 		if i > 0 && r >= 'A' && r <= 'Z' {
 			result.WriteRune('_')
 		}
 		result.WriteRune(r)
 	}
-	
+
 	return strings.ToLower(result.String())
 }
 
@@ -30,12 +35,12 @@ func ToCamelCase(s string) string {
 	if s == "" {
 		return s
 	}
-	
+
 	// Split by non-alphanumeric characters
 	parts := strings.FieldsFunc(s, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 	})
-	
+
 	// Convert to camelCase
 	for i, part := range parts {
 		if i == 0 {
@@ -44,7 +49,7 @@ func ToCamelCase(s string) string {
 			parts[i] = strings.Title(strings.ToLower(part))
 		}
 	}
-	
+
 	return strings.Join(parts, "")
 }
 
@@ -63,7 +68,7 @@ func ToGoFieldName(name string) string {
 	if name == "id" {
 		return "ID"
 	}
-	
+
 	words := SplitWords(name)
 	for i, word := range words {
 		if i == 0 {
@@ -72,7 +77,7 @@ func ToGoFieldName(name string) string {
 			words[i] = strings.Title(word)
 		}
 	}
-	
+
 	return strings.Join(words, "")
 }
 
@@ -80,7 +85,7 @@ func ToGoFieldName(name string) string {
 func SplitWords(s string) []string {
 	var words []string
 	var lastPos int
-	
+
 	// Split by delimiters like underscore, dash, etc.
 	if strings.ContainsAny(s, "_-") {
 		words = append(words, strings.FieldsFunc(s, func(r rune) bool {
@@ -88,7 +93,7 @@ func SplitWords(s string) []string {
 		})...)
 		return words
 	}
-	
+
 	// Split by camelCase or snake_case
 	for i, r := range s {
 		if i > 0 && unicode.IsUpper(r) {
@@ -99,7 +104,7 @@ func SplitWords(s string) []string {
 	if lastPos < len(s) {
 		words = append(words, s[lastPos:])
 	}
-	
+
 	return words
 }
 
@@ -165,11 +170,11 @@ func MapSchemaToGoType(schema *openapi3.Schema) (string, error) {
 			}
 			return fmt.Sprintf("map[string]%s", valueType), nil
 		}
-		
+
 		// Check if this is a reference to a model
 		// In kin-openapi, this is actually in SchemaRef, not Schema
 		// This should be handled at the caller level
-		
+
 		return "map[string]interface{}", nil
 	default:
 		return "interface{}", nil
@@ -181,9 +186,9 @@ func MapParameterTypeToGo(param *openapi3.Parameter) string {
 	if param.Schema == nil || param.Schema.Value == nil {
 		return "string"
 	}
-	
+
 	schema := param.Schema.Value
-	
+
 	switch schema.Type {
 	case "string":
 		return "string"

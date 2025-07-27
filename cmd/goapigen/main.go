@@ -156,8 +156,9 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Generate main.go and routes.go files using basic init (no features)
-		files, err := mainGen.GenerateMain()
+		// Generate main.go and routes.go files with current feature flags
+		hasServices := *genServices || *genHTTP // HTTP handlers need services
+		files, err := mainGen.GenerateWithFeatures(*genMongo, *genMongo, hasServices, *genHTTP)
 		if err != nil {
 			fmt.Printf("Error generating main files: %v\n", err)
 			os.Exit(1)
@@ -500,7 +501,7 @@ func main() {
 	}
 
 	// Regenerate routes.go if any components were generated
-	if *genServices || *genMongo || *genHTTP || *initProject {
+	if *genHTTP || *initProject {
 		// Create main generator for routes update
 		mainGen, err := generator.NewMainGenerator(apiParser, importPath, templateFS)
 		if err != nil {
@@ -512,13 +513,32 @@ func main() {
 			mainGen.SetDefaultPort("8080")
 
 			// Generate routes.go with current feature flags
-			files, err := mainGen.GenerateWithFeatures(*genMongo, *genMongo, *genHTTP)
+			// Check if services exist by looking for service files or if services flag was used
+			hasServices := *genServices || *genHTTP // HTTP handlers need services
+			files, err := mainGen.GenerateWithFeatures(*genMongo, *genMongo, hasServices, *genHTTP)
 			if err != nil {
 				fmt.Printf("Error generating routes: %v\n", err)
 			} else {
-				// Only write routes.go (always overwrite)
+				cmdDir := filepath.Join(*outputDir, "cmd", filepath.Base(targetModuleName))
+
+				// Write main.go (only if it doesn't exist, since it's stable)
+				if mainContent, exists := files["main.go"]; exists {
+					mainPath := filepath.Join(cmdDir, "main.go")
+					if _, err := os.Stat(mainPath); os.IsNotExist(err) || *overwrite {
+						if err := os.MkdirAll(cmdDir, 0755); err != nil {
+							fmt.Printf("Error creating directory for main.go: %v\n", err)
+						} else {
+							if err := os.WriteFile(mainPath, []byte(mainContent), 0644); err != nil {
+								fmt.Printf("Error writing main.go: %v\n", err)
+							} else {
+								fmt.Printf("Updated main.go in %s\n", mainPath)
+							}
+						}
+					}
+				}
+
+				// Write routes.go (always overwrite)
 				if routesContent, exists := files["routes.go"]; exists {
-					cmdDir := filepath.Join(*outputDir, "cmd", filepath.Base(targetModuleName))
 					routesPath := filepath.Join(cmdDir, "routes.go")
 
 					// Ensure directory exists
@@ -529,6 +549,22 @@ func main() {
 							fmt.Printf("Error writing routes.go: %v\n", err)
 						} else {
 							fmt.Printf("Updated routes.go in %s\n", routesPath)
+						}
+					}
+				}
+
+				// Write database.go (always overwrite)
+				if databaseContent, exists := files["database.go"]; exists {
+					databasePath := filepath.Join(cmdDir, "database.go")
+
+					// Ensure directory exists
+					if err := os.MkdirAll(cmdDir, 0755); err != nil {
+						fmt.Printf("Error creating directory for database.go: %v\n", err)
+					} else {
+						if err := os.WriteFile(databasePath, []byte(databaseContent), 0644); err != nil {
+							fmt.Printf("Error writing database.go: %v\n", err)
+						} else {
+							fmt.Printf("Updated database.go in %s\n", databasePath)
 						}
 					}
 				}

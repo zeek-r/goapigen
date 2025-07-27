@@ -64,6 +64,7 @@ func NewServiceGenerator(parser *parser.OpenAPIParser, packageName string, impor
 	tmpl := template.New("")
 	tmpl.Funcs(template.FuncMap{
 		"contains": func(s, substr string) bool { return strings.Contains(s, substr) },
+		"lower":    func(s string) string { return strings.ToLower(s) },
 	})
 
 	// Parse templates

@@ -1,0 +1,85 @@
+package main
+
+import (
+{{- if .UseMongo}}
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+{{- end}}
+)
+
+// DatabaseConnections holds all database connections
+type DatabaseConnections struct {
+{{- if .UseMongo}}
+	MongoDB *mongo.Client
+{{- end}}
+}
+
+
+
+// setupDatabase initializes all database connections
+// This file is regenerated - do not edit manually
+func setupDatabase() (*DatabaseConnections, error) {
+	db := &DatabaseConnections{}
+
+{{- if .UseMongo}}
+	// Setup MongoDB connection
+	mongoClient, err := setupMongoDB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup MongoDB: %w", err)
+	}
+	db.MongoDB = mongoClient
+{{- end}}
+
+	return db, nil
+}
+
+
+
+{{- if .UseMongo}}
+// setupMongoDB creates and configures MongoDB connection
+func setupMongoDB() (*mongo.Client, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get MongoDB URI from environment
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		mongoURI = "{{.MongoURI}}" // Default if not set
+	}
+
+	// Connect to MongoDB
+	clientOptions := options.Client().ApplyURI(mongoURI)
+	client, err := mongo.Connect(ctx, clientOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
+	}
+
+	// Ping the database to verify connection
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ping MongoDB: %w", err)
+	}
+
+	log.Println("Connected to MongoDB successfully")
+	return client, nil
+}
+
+// closeMongoDB gracefully closes MongoDB connection
+func closeMongoDB(client *mongo.Client) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	if err := client.Disconnect(ctx); err != nil {
+		return fmt.Errorf("error disconnecting from MongoDB: %w", err)
+	}
+	
+	log.Println("Disconnected from MongoDB")
+	return nil
+}
+{{- end}} 

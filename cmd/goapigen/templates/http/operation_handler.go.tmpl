@@ -16,12 +16,12 @@ import (
 
 // {{.OperationID}}Handler handles the {{.OperationID}} operation
 type {{.OperationID}}Handler struct {
-	service service.{{.SchemaName}}Service
+	service {{.SchemaName | lower}}.{{.SchemaName}}Service
 	wrapper *httputil.HandlerWrapper
 }
 
 // New{{.OperationID}}Handler creates a new handler for the {{.OperationID}} operation
-func New{{.OperationID}}Handler(service service.{{.SchemaName}}Service) *{{.OperationID}}Handler {
+func New{{.OperationID}}Handler(service {{.SchemaName | lower}}.{{.SchemaName}}Service) *{{.OperationID}}Handler {
 	return &{{.OperationID}}Handler{
 		service: service,
 		wrapper: httputil.DefaultHandlerWrapper(),
@@ -105,14 +105,14 @@ func (h *{{.OperationID}}Handler) handle(r *http.Request, input interface{}) (in
 	}
 	
 	// Convert HTTP request to domain request
-	createReq := service.{{.SchemaName}}CreateRequest{
+	createReq := {{.SchemaName | lower}}.{{.SchemaName}}CreateRequest{
 		{{- range .RequestFields}}
 		{{.Name}}: req.{{.Name}},
 		{{- end}}
 	}
 	return h.service.Create(ctx, createReq)
 	{{- else}}
-	return h.service.Create(ctx, service.{{.SchemaName}}CreateRequest{})
+	return h.service.Create(ctx, {{.SchemaName | lower}}.{{.SchemaName}}CreateRequest{})
 	{{- end}}
 	
 	{{- else if eq .Method "PUT"}}
@@ -137,7 +137,7 @@ func (h *{{.OperationID}}Handler) handle(r *http.Request, input interface{}) (in
 	}
 	
 	// Convert HTTP request to domain request
-	updateReq := service.{{.SchemaName}}UpdateRequest{
+	updateReq := {{.SchemaName | lower}}.{{.SchemaName}}UpdateRequest{
 		{{- range .RequestFields}}
 		{{- if and (ne .Name "CreatedAt") (ne .Name "UpdatedAt")}}
 		{{.Name}}: req.{{.Name}},
@@ -146,7 +146,7 @@ func (h *{{.OperationID}}Handler) handle(r *http.Request, input interface{}) (in
 	}
 	return h.service.Update(ctx, id, updateReq)
 	{{- else}}
-	return h.service.Update(ctx, id, service.{{.SchemaName}}UpdateRequest{})
+	return h.service.Update(ctx, id, {{.SchemaName | lower}}.{{.SchemaName}}UpdateRequest{})
 	{{- end}}
 	{{- else}}
 	return nil, domain.NewBadRequestError("Missing ID parameter", nil)

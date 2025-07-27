@@ -10,6 +10,8 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/zeek-r/goapigen/internal/parser"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // PathParam represents a path parameter for a handler
@@ -65,6 +67,8 @@ type ResourceData struct {
 	Name       string
 	BasePath   string
 	Operations []OperationData
+	Domain     string
+	ImportPath string
 }
 
 // RouterData contains data for router generation
@@ -97,7 +101,8 @@ func NewHTTPGenerator(
 	tmpl := template.New("")
 	tmpl.Funcs(template.FuncMap{
 		"contains": func(s, substr string) bool { return strings.Contains(s, substr) },
-		"title":    func(s string) string { return strings.Title(strings.ToLower(s)) },
+		"title":    func(s string) string { return cases.Title(language.English).String(s) },
+		"lower":    func(s string) string { return strings.ToLower(s) },
 	})
 
 	// Parse templates
@@ -224,6 +229,8 @@ func (g *HTTPGenerator) GenerateHandlers() (map[string]string, error) {
 			Name:       ToPascalCase(name),
 			BasePath:   basePath,
 			Operations: ops,
+			Domain:     strings.ToLower(name),
+			ImportPath: g.importPath,
 		}
 		resources = append(resources, resourceData)
 
@@ -245,19 +252,6 @@ func (g *HTTPGenerator) GenerateHandlers() (map[string]string, error) {
 	sort.Slice(resources, func(i, j int) bool {
 		return resources[i].Name < resources[j].Name
 	})
-
-	// routerData := RouterData{
-	// 	HandlerPackage: g.handlerPackage,
-	// 	Resources:      resources,
-	// 	Operations:     allOperations,
-	// }
-
-	// Router generation disabled - main.go handles routing directly
-	// routerCode, err := g.generateRouter(routerData)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to generate router: %w", err)
-	// }
-	// result["router.go"] = routerCode
 
 	return result, nil
 }
@@ -562,15 +556,6 @@ func (g *HTTPGenerator) generateHandlerWrapper() (string, error) {
 	return buf.String(), nil
 }
 
-// generateRouter generates the router setup file
-func (g *HTTPGenerator) generateRouter(data RouterData) (string, error) {
-	var buf bytes.Buffer
-	if err := g.templates.ExecuteTemplate(&buf, "router.go.tmpl", data); err != nil {
-		return "", fmt.Errorf("failed to render router template: %w", err)
-	}
-	return buf.String(), nil
-}
-
 // generateMocks generates mock implementations for the service interfaces
 func (g *HTTPGenerator) generateMocks(data OperationData) (string, error) {
 	var buf bytes.Buffer
@@ -582,57 +567,9 @@ func (g *HTTPGenerator) generateMocks(data OperationData) (string, error) {
 
 // generateSchemaHandler creates a handler file that provides a function to register all operation handlers for a schema
 func (g *HTTPGenerator) generateSchemaHandler(resource ResourceData) (string, error) {
-	// Create a simple template string instead of trying to parse from file
-	templateStr := `package handler
-
-import (
-	"github.com/go-chi/chi/v5"
-	"{{.ImportPath}}/internal/services/{{.Domain}}"
-)
-
-// New{{.Name}}Handler creates a chi.Router with all {{.Name}} endpoints registered
-func New{{.Name}}Handler({{.VarName}}Service service.{{.Name}}Service) chi.Router {
-	r := chi.NewRouter()
-
-	{{range .Operations}}
-	// Register {{.OperationID}} handler
-	{{.VarName}}Handler := New{{.OperationID}}Handler({{$.VarName}}Service)
-	{{.VarName}}Handler.Register(r)
-	{{end}}
-
-	return r
-}
-`
-
-	tmpl, err := template.New("schema_handler").Funcs(template.FuncMap{
-		"contains": func(s, substr string) bool { return strings.Contains(s, substr) },
-		"title":    func(s string) string { return strings.Title(strings.ToLower(s)) },
-	}).Parse(templateStr)
-
-	if err != nil {
-		return "", fmt.Errorf("error parsing schema handler template: %w", err)
-	}
-
-	// Use lowercase for the variable name
-	varName := strings.ToLower(resource.Name)
-
-	data := struct {
-		Name       string
-		VarName    string
-		Operations []OperationData
-		Domain     string
-		ImportPath string
-	}{
-		Name:       resource.Name,
-		VarName:    varName,
-		Operations: resource.Operations,
-		Domain:     strings.ToLower(resource.Name),
-		ImportPath: g.importPath,
-	}
-
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("error executing schema handler template: %w", err)
+	if err := g.templates.ExecuteTemplate(&buf, "schema_handler.go.tmpl", resource); err != nil {
+		return "", fmt.Errorf("failed to render schema handler template: %w", err)
 	}
 
 	return buf.String(), nil

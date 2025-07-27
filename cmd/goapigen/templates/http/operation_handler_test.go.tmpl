@@ -17,7 +17,6 @@ import (
 	"{{.ImportPath}}/internal/pkg/domain"
 	"{{.ImportPath}}/internal/services/{{.Domain}}"
 	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
-	{{.PackageName}} "{{.ModelImportPath}}"
 )
 
 {{- else if and (eq .Method "GET") (contains .Path "{id}")}}
@@ -37,7 +36,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"{{.ImportPath}}/internal/pkg/domain"
 	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
-	{{.PackageName}} "{{.ModelImportPath}}"
 )
 
 {{- else if eq .Method "GET" }}
@@ -55,7 +53,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"{{.ImportPath}}/internal/pkg/domain"
 	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
-	{{.PackageName}} "{{.ModelImportPath}}"
 )
 
 {{- else if eq .Method "PUT" }}
@@ -77,7 +74,6 @@ import (
 	"{{.ImportPath}}/internal/pkg/domain"
 	"{{.ImportPath}}/internal/services/{{.Domain}}"
 	"{{.ImportPath}}/internal/adapters/http/{{.Domain}}/mocks"
-	{{.PackageName}} "{{.ModelImportPath}}"
 )
 
 {{- else if eq .Method "DELETE" }}
@@ -105,7 +101,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		mockService := new(mocks.Mock{{.SchemaName}}Service)
 		
 		// Create test data
-		testEntity := {{.PackageName}}.{{.SchemaName}}{
+		testEntity := domain.{{.SchemaName}}{
 			ID: "test-id",
 			{{- range .RequestFields}}
 			{{.Name}}: {{template "testValue" .}},
@@ -113,7 +109,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		}
 		
 		// Create expected request
-		expectedRequest := service.{{.SchemaName}}CreateRequest{
+		expectedRequest := {{.SchemaName | lower }}.{{.SchemaName}}CreateRequest{
 			{{- range .RequestFields}}
 			{{.Name}}: {{template "testValue" .}},
 			{{- end}}
@@ -144,7 +140,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
 		
 		// Parse response
-		var response {{.PackageName}}.{{.SchemaName}}
+		var response domain.{{.SchemaName}}
 		err = json.Unmarshal(rr.Body.Bytes(), &response)
 		require.NoError(t, err)
 		
@@ -186,7 +182,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		
 		// Set up mock to return error
 		mockService.On("Create", mock.Anything, mock.Anything).Return(
-			{{.PackageName}}.{{.SchemaName}}{}, 
+			domain.{{.SchemaName}}{}, 
 			domain.NewValidationError("test validation error"))
 		
 		// Create handler
@@ -222,7 +218,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		
 		// Create test data
 		testID := "test-id"
-		testEntity := {{.PackageName}}.{{.SchemaName}}{
+		testEntity := domain.{{.SchemaName}}{
 			ID: testID,
 			{{- range .RequestFields}}
 			{{.Name}}: {{template "testValue" .}},
@@ -251,7 +247,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
 		
 		// Parse response
-		var response {{.PackageName}}.{{.SchemaName}}
+		var response domain.{{.SchemaName}}
 		err := json.Unmarshal(rr.Body.Bytes(), &response)
 		require.NoError(t, err)
 		
@@ -274,7 +270,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		
 		// Set up mock expectations
 		mockService.On("GetByID", mock.Anything, testID).Return(
-			{{.PackageName}}.{{.SchemaName}}{},
+			domain.{{.SchemaName}}{},
 			domain.NewNotFoundError("{{.SchemaName}}", testID))
 		
 		// Create handler
@@ -306,7 +302,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		mockService := new(mocks.Mock{{.SchemaName}}Service)
 		
 		// Create test data
-		testEntities := []{{.PackageName}}.{{.SchemaName}}{
+		testEntities := []domain.{{.SchemaName}}{
 			{
 				ID: "test-id-1",
 				{{- range .RequestFields}}
@@ -338,7 +334,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
 		
 		// Parse response
-		var response []{{.PackageName}}.{{.SchemaName}}
+		var response []domain.{{.SchemaName}}
 		err := json.Unmarshal(rr.Body.Bytes(), &response)
 		require.NoError(t, err)
 		
@@ -357,7 +353,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		
 		// Set up mock to return error
 		mockService.On("List", mock.Anything).Return(
-			[]{{.PackageName}}.{{.SchemaName}}{},
+			[]domain.{{.SchemaName}}{},
 			domain.NewInternalError("test internal error", nil))
 		
 		// Create handler
@@ -385,7 +381,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		
 		// Create test data
 		testID := "test-id"
-		testEntity := {{.PackageName}}.{{.SchemaName}}{
+		testEntity := domain.{{.SchemaName}}{
 			ID: testID,
 			{{- range .RequestFields}}
 			{{- if ne .Name "ID"}}
@@ -395,7 +391,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		}
 		
 		// Create expected request
-		expectedRequest := service.{{.SchemaName}}UpdateRequest{
+		expectedRequest := {{.SchemaName | lower }}.{{.SchemaName}}UpdateRequest{
 			{{- range .RequestFields}}
 			{{- if and (ne .Name "CreatedAt") (ne .Name "UpdatedAt")}}
 			{{.Name}}: {{template "testValue" .}},
@@ -435,7 +431,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		assert.Equal(t, {{.SuccessStatus}}, rr.Code)
 		
 		// Parse response
-		var response {{.PackageName}}.{{.SchemaName}}
+		var response domain.{{.SchemaName}}
 		err = json.Unmarshal(rr.Body.Bytes(), &response)
 		require.NoError(t, err)
 		
@@ -487,7 +483,7 @@ func Test{{.OperationID}}Handler_Handle(t *testing.T) {
 		
 		// Set up mock expectations
 		mockService.On("Update", mock.Anything, testID, mock.Anything).Return(
-			{{.PackageName}}.{{.SchemaName}}{},
+			domain.{{.SchemaName}}{},
 			domain.NewNotFoundError("{{.SchemaName}}", testID))
 		
 		// Create handler

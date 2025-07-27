@@ -1,4 +1,4 @@
-package service
+package {{.SchemaName | lower}}
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"{{.ImportPath}}/internal/pkg/domain"
-	{{.PackageName}} "{{.ImportPath}}"
 )
 
 // Mock{{.SchemaName}}Repository is a mock implementation of {{.SchemaName}}Repository
@@ -21,7 +20,7 @@ type Mock{{.SchemaName}}Repository struct {
 
 {{- if .HasCreateOp}}
 // Create is a mocked implementation
-func (m *Mock{{.SchemaName}}Repository) Create(ctx context.Context, {{.VarName}} *{{.PackageName}}.{{.SchemaName}}) error {
+func (m *Mock{{.SchemaName}}Repository) Create(ctx context.Context, {{.VarName}} *domain.{{.SchemaName}}) error {
 	args := m.Called(ctx, {{.VarName}})
 	return args.Error(0)
 }
@@ -29,29 +28,29 @@ func (m *Mock{{.SchemaName}}Repository) Create(ctx context.Context, {{.VarName}}
 
 {{- if .HasGetOp}}
 // GetByID is a mocked implementation
-func (m *Mock{{.SchemaName}}Repository) GetByID(ctx context.Context, id string) (*{{.PackageName}}.{{.SchemaName}}, error) {
+func (m *Mock{{.SchemaName}}Repository) GetByID(ctx context.Context, id string) (*domain.{{.SchemaName}}, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*{{.PackageName}}.{{.SchemaName}}), args.Error(1)
+	return args.Get(0).(*domain.{{.SchemaName}}), args.Error(1)
 }
 {{- end}}
 
 {{- if .HasListOp}}
 // List is a mocked implementation
-func (m *Mock{{.SchemaName}}Repository) List(ctx context.Context) ([]*{{.PackageName}}.{{.SchemaName}}, error) {
+func (m *Mock{{.SchemaName}}Repository) List(ctx context.Context) ([]*domain.{{.SchemaName}}, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*{{.PackageName}}.{{.SchemaName}}), args.Error(1)
+	return args.Get(0).([]*domain.{{.SchemaName}}), args.Error(1)
 }
 {{- end}}
 
 {{- if .HasUpdateOp}}
 // Update is a mocked implementation
-func (m *Mock{{.SchemaName}}Repository) Update(ctx context.Context, {{.VarName}} *{{.PackageName}}.{{.SchemaName}}) error {
+func (m *Mock{{.SchemaName}}Repository) Update(ctx context.Context, {{.VarName}} *domain.{{.SchemaName}}) error {
 	args := m.Called(ctx, {{.VarName}})
 	return args.Error(0)
 }
@@ -79,7 +78,7 @@ func TestDefault{{.SchemaName}}Service_Create(t *testing.T) {
 		}
 
 		// Set up expectations
-		mockRepo.On("Create", mock.Anything, mock.MatchedBy(func({{.VarName}} *{{.PackageName}}.{{.SchemaName}}) bool {
+		mockRepo.On("Create", mock.Anything, mock.MatchedBy(func({{.VarName}} *domain.{{.SchemaName}}) bool {
 			{{- range .CreateFields}}
 			if {{$.VarName}}.{{.Name}} != request.{{.Name}} {
 				return false
@@ -170,7 +169,7 @@ func TestDefault{{.SchemaName}}Service_GetByID(t *testing.T) {
 		testID := "test-id"
 
 		// Mock entity
-		mockEntity := &{{.PackageName}}.{{.SchemaName}}{
+		mockEntity := &domain.{{.SchemaName}}{
 			ID: testID,
 			{{- range .CreateFields}}
 			{{.Name}}: {{template "testValue" .}},
@@ -273,7 +272,7 @@ func TestDefault{{.SchemaName}}Service_List(t *testing.T) {
 		mockRepo := new(Mock{{.SchemaName}}Repository)
 
 		// Mock entities
-		mockEntities := []*{{.PackageName}}.{{.SchemaName}}{
+		mockEntities := []*domain.{{.SchemaName}}{
 			{
 				ID: "test-id-1",
 				{{- range .CreateFields}}
@@ -349,14 +348,14 @@ func TestDefault{{.SchemaName}}Service_Update(t *testing.T) {
 		}
 
 		// Mock existing entity
-		mockEntity := &{{.PackageName}}.{{.SchemaName}}{
+		mockEntity := &domain.{{.SchemaName}}{
 			ID: testID,
 			// Other fields...
 		}
 
 		// Set up expectations
 		mockRepo.On("GetByID", mock.Anything, testID).Return(mockEntity, nil)
-		mockRepo.On("Update", mock.Anything, mock.MatchedBy(func({{.VarName}} *{{.PackageName}}.{{.SchemaName}}) bool {
+		mockRepo.On("Update", mock.Anything, mock.MatchedBy(func({{.VarName}} *domain.{{.SchemaName}}) bool {
 			{{- range .UpdateFields}}
 			if {{$.VarName}}.{{.Name}} != request.{{.Name}} {
 				return false
@@ -426,7 +425,7 @@ func TestDefault{{.SchemaName}}Service_Delete(t *testing.T) {
 		testID := "test-id"
 
 		// Mock existing entity
-		mockEntity := &{{.PackageName}}.{{.SchemaName}}{
+		mockEntity := &domain.{{.SchemaName}}{
 			ID: testID,
 			// Other fields...
 		}
