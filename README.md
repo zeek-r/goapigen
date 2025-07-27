@@ -18,21 +18,28 @@
 
 ### Installation
 
+#### Option 1: Install via go install (Recommended)
+```bash
+# Install directly from GitHub
+go install github.com/zeek-r/goapigen@latest
+```
+
+#### Option 2: Build from source
 ```bash
 # Clone the repository
 git clone https://github.com/zeek-r/goapigen.git
 cd goapigen
 
 # Build the CLI tool
-go build -o goapigen cmd/goapigen/main.go
+go build -o goapigen .
 ```
 
 ### Basic Usage
 
 ```bash
-# Generate a complete API project
-./goapigen --spec examples/petstore/openapi.yaml \
-           --output ./my-api \
+# Generate a complete API project (using installed binary)
+goapigen --spec examples/petstore/openapi.yaml \
+         --output ./my-api \
            --init --services --mongo --http
 
 # Navigate to generated project
@@ -63,10 +70,10 @@ go run cmd/my-api/*.go
 
 #### 1. **Quick Start - Complete API Generation**
 ```bash
-# Generate a full-featured API project
-./goapigen --spec examples/petstore/openapi.yaml \
-           --output ./petstore-api \
-           --init --services --mongo --http
+# Generate a full-featured API project (using installed binary)
+goapigen --spec examples/petstore/openapi.yaml \
+         --output ./petstore-api \
+         --init --services --mongo --http
 
 # Navigate and run
 cd petstore-api
@@ -76,7 +83,7 @@ go run cmd/petstore-api/*.go
 #### 2. **Types-Only Generation**
 ```bash
 # Generate only domain types for existing projects
-./goapigen --spec api.yaml --types --output ./existing-project
+goapigen --spec api.yaml --types --output ./existing-project
 ```
 
 #### 3. **Incremental Development**
