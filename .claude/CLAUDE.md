@@ -123,10 +123,15 @@ goapigen/
 - ✅ **Benchmark tests** for performance measurement and validation
 - ✅ **README documentation** updated with comprehensive testing and quality sections
 
-### 🚧 **In Progress - Major Architecture Fix Required**
-- 🔄 **Critical Init Command Fix** - `--init` generates main.go with imports to non-existent packages
-- 🔄 **Project Structure Refactor** - Move main.go to cmd/{project}/ directory (Go standard)
-- 🔄 **Routes Generation Strategy** - Split into stable main.go + regenerated routes.go
+### ✅ **Architecture Fixes Completed**
+- ✅ **Critical Init Command Fixed** - `--init` now generates clean basic server infrastructure only
+- ✅ **Project Structure Implemented** - Using Go-standard cmd/{project}/ directory structure
+- ✅ **Routes Generation Strategy** - Split into stable main.go + regenerated routes.go
+- ✅ **Duplicate Routes Fixed** - Single routes.go file in correct location
+- ✅ **Conditional Service Generation** - Added --services flag with proper dependency management
+
+### 🚧 **Current Issue**
+- 🔄 **Routes Refresh Bug** - routes.go not updating when --http handlers are generated
 
 ### ⬜ **Pending Tasks**
 - ⬜ Test complete API functionality with real requests and MongoDB operations
@@ -328,10 +333,19 @@ generated-project/
 - Metrics and observability integration
 
 ### **Current Status Summary**
-- ✅ **Code generation works** for complete flag combinations (`--init --types --mongo --http`)
-- ❌ **Init command broken** when used alone - generates uncompilable main.go
-- 🎯 **Solution identified** - New architecture with cmd/{project}/ and routes.go pattern
-- 🚧 **Implementation needed** - Refactor init strategy and file organization
+- ✅ **Architecture completely refactored** - Clean cmd/{project}/ structure with conditional generation
+- ✅ **Init command fixed** - Generates compilable basic server infrastructure only
+- ✅ **Modular generation** - --init, --types, --services, --mongo, --http work independently
+- ✅ **Single routes.go** - No more duplicate file generation
+- 🔄 **Routes refresh issue** - Need to ensure routes.go updates when components change
+
+### **New CLI Options Available**
+- `--init` - Basic server infrastructure (main.go, routes.go, .env, directories)
+- `--types` - Domain types and errors (enabled by default)
+- `--services` - Business logic layer (NEW)
+- `--mongo` - MongoDB repositories
+- `--http` - REST API handlers
+- All flags can be combined or used independently
 
 ## Testing Infrastructure & Results
 
