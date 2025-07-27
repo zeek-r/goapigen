@@ -42,7 +42,17 @@ func main() {
 	}
 
 	// Setup database connections (implemented in database.go)
+{{- $hasHandlers := false}}
+{{- range .Resources}}
+	{{- if .HasHandler}}
+		{{- $hasHandlers = true}}
+	{{- end}}
+{{- end}}
+{{- if or .UseMongo $hasHandlers}}
 	db, err := setupDatabase()
+{{- else}}
+	_, err := setupDatabase()
+{{- end}}
 	if err != nil {
 		log.Fatalf("Failed to setup database: %v", err)
 	}
@@ -60,12 +70,6 @@ func main() {
 	r := setupRouter()
 
 	// Setup handlers and register routes
-{{- $hasHandlers := false}}
-{{- range .Resources}}
-	{{- if .HasHandler}}
-		{{- $hasHandlers = true}}
-	{{- end}}
-{{- end}}
 {{- if $hasHandlers}}
 	handlers := setupHandlers(db)
 	registerRoutes(r, handlers)
