@@ -7,7 +7,6 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/zeek-r/goapigen/internal/config"
 	"github.com/zeek-r/goapigen/internal/parser"
 )
 
@@ -28,17 +27,21 @@ type MainResourceData struct {
 	VarName        string // Variable name (e.g., pet)
 	CollectionName string // MongoDB collection name (e.g., pets)
 	APIPath        string // API path (e.g., /pets)
+	HasRepository  bool   // Whether repository is generated for this resource
+	HasService     bool   // Whether service is generated for this resource
+	HasHandler     bool   // Whether handler is generated for this resource
 }
 
 // MainTemplateData holds data for the main.go template
 type MainTemplateData struct {
-	ImportPath         string             // Import path for packages
-	UseGeneratedRoutes bool               // Whether to use generated routes
-	Resources          []MainResourceData // Resources to be included in the router
-	DefaultPort        string             // Default port for the server
-	ShutdownTimeout    int                // Shutdown timeout in seconds
-	MongoURI           string             // MongoDB URI
-	DBName             string             // MongoDB database name
+	ImportPath      string             // Import path for packages
+	UseMongo        bool               // Whether MongoDB is used
+	HasResources    bool               // Whether any resources are defined
+	Resources       []MainResourceData // Resources to be included in the router
+	DefaultPort     string             // Default port for the server
+	ShutdownTimeout int                // Shutdown timeout in seconds
+	MongoURI        string             // MongoDB URI
+	DBName          string             // MongoDB database name
 }
 
 // NewMainGenerator creates a new MainGenerator
@@ -78,12 +81,62 @@ func (g *MainGenerator) SetShutdownTimeout(seconds int) {
 	g.shutdownTime = seconds
 }
 
-// GenerateMain generates the main.go file
-func (g *MainGenerator) GenerateMain() (string, error) {
+// GenerateMain generates both main.go and routes.go files
+func (g *MainGenerator) GenerateMain() (map[string]string, error) {
+	result := make(map[string]string)
+
+	// Generate stable main.go
+	mainCode, err := g.GenerateMainFile(false, false, false) // Basic server only
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate main.go: %w", err)
+	}
+	result["main.go"] = mainCode
+
+	// Generate routes.go with basic health check only
+	routesCode, err := g.GenerateRoutesFile(false, false, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate routes.go: %w", err)
+	}
+	result["routes.go"] = routesCode
+
+	return result, nil
+}
+
+// GenerateMainFile generates the stable main.go file
+func (g *MainGenerator) GenerateMainFile(useMongo, hasRepo, hasHandler bool) (string, error) {
 	// Load template
-	tmpl, err := template.ParseFS(g.templateFS, config.MainTemplate)
+	tmpl, err := template.ParseFS(g.templateFS, "templates/cmd/main.go.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse main template: %w", err)
+	}
+
+	// Create template data
+	data := MainTemplateData{
+		ImportPath:      g.importPath,
+		UseMongo:        useMongo,
+		HasResources:    false, // main.go doesn't need resource info
+		Resources:       []MainResourceData{},
+		DefaultPort:     g.defaultPort,
+		ShutdownTimeout: g.shutdownTime,
+		MongoURI:        g.mongoURI,
+		DBName:          g.dbName,
+	}
+
+	// Execute template
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute main template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// GenerateRoutesFile generates the routes.go file with conditional imports
+func (g *MainGenerator) GenerateRoutesFile(useMongo, hasRepo, hasHandler bool) (string, error) {
+	// Load template
+	tmpl, err := template.ParseFS(g.templateFS, "templates/cmd/routes.go.tmpl")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse routes template: %w", err)
 	}
 
 	// Build resource data from schemas
@@ -100,25 +153,50 @@ func (g *MainGenerator) GenerateMain() (string, error) {
 			VarName:        varName,
 			CollectionName: collectionName,
 			APIPath:        apiPath,
+			HasRepository:  hasRepo,
+			HasService:     true, // Services are always generated
+			HasHandler:     hasHandler,
 		})
 	}
 
 	// Create template data
 	data := MainTemplateData{
-		ImportPath:         g.importPath,
-		UseGeneratedRoutes: true,
-		Resources:          resources,
-		DefaultPort:        g.defaultPort,
-		ShutdownTimeout:    g.shutdownTime,
-		MongoURI:           g.mongoURI,
-		DBName:             g.dbName,
+		ImportPath:      g.importPath,
+		UseMongo:        useMongo,
+		HasResources:    len(resources) > 0,
+		Resources:       resources,
+		DefaultPort:     g.defaultPort,
+		ShutdownTimeout: g.shutdownTime,
+		MongoURI:        g.mongoURI,
+		DBName:          g.dbName,
 	}
 
 	// Execute template
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute main template: %w", err)
+		return "", fmt.Errorf("failed to execute routes template: %w", err)
 	}
 
 	return buf.String(), nil
+}
+
+// GenerateWithFeatures generates both files with specific feature flags
+func (g *MainGenerator) GenerateWithFeatures(useMongo, hasRepo, hasHandler bool) (map[string]string, error) {
+	result := make(map[string]string)
+
+	// Generate main.go with appropriate features
+	mainCode, err := g.GenerateMainFile(useMongo, hasRepo, hasHandler)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate main.go: %w", err)
+	}
+	result["main.go"] = mainCode
+
+	// Generate routes.go with conditional imports
+	routesCode, err := g.GenerateRoutesFile(useMongo, hasRepo, hasHandler)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate routes.go: %w", err)
+	}
+	result["routes.go"] = routesCode
+
+	return result, nil
 }

@@ -1,0 +1,64 @@
+package main
+
+import (
+{{- if and .HasResources .UseMongo}}
+	"log"
+	"os"
+{{- end}}
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+{{- if .UseMongo}}
+	"go.mongodb.org/mongo-driver/mongo"
+{{- end}}
+
+{{- if .HasResources}}
+	// Import generated packages with aliases to avoid naming conflicts
+{{- range .Resources}}
+{{- if and .HasRepository .HasService .HasHandler}}
+	{{.VarName}}Repository "{{$.ImportPath}}/internal/adapters/mongo/{{.VarName}}"
+	{{.VarName}}Service "{{$.ImportPath}}/internal/services/{{.VarName}}"
+	{{.VarName}}Handler "{{$.ImportPath}}/internal/adapters/http/{{.VarName}}"
+{{- end}}
+{{- end}}
+{{- end}}
+)
+
+// registerRoutes sets up all application routes
+// This file is regenerated - do not edit manually
+func registerRoutes(r *chi.Mux, mongoClient interface{}) {
+	// Health check route (always present)
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+{{- if and .HasResources .UseMongo}}
+	// Get database name from environment
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "{{.DBName}}" // Default if not set
+	}
+
+	// Cast mongoClient back to *mongo.Client for use with repositories
+	client, ok := mongoClient.(*mongo.Client)
+	if !ok && mongoClient != nil {
+		// This shouldn't happen, but handle gracefully
+		log.Printf("Warning: mongoClient is not *mongo.Client, skipping database routes")
+		return
+	}
+{{- end}}
+
+{{- if .HasResources}}
+	// Register generated API routes
+{{- range .Resources}}
+{{- if and .HasRepository .HasService .HasHandler}}
+	// Setup {{.Name}} routes
+	{{.VarName}}Repo := {{.VarName}}Repository.New{{.Name}}Repository(client.Database(dbName))
+	{{.VarName}}Svc := {{.VarName}}Service.New{{.Name}}Service({{.VarName}}Repo)
+	{{.VarName}}Router := {{.VarName}}Handler.New{{.Name}}Handler({{.VarName}}Svc)
+	r.Mount("/{{.APIPath}}", {{.VarName}}Router)
+{{- end}}
+{{- end}}
+{{- end}}
+} 

@@ -26,6 +26,7 @@ func main() {
 		outputDir   = flag.String("output", ".", "Output directory for generated code")
 		packageName = flag.String("package", config.DefaultAPIPackage, "Package name for generated code")
 		genTypes    = flag.Bool("types", true, "Generate type definitions")
+		genServices = flag.Bool("services", false, "Generate service layer")
 		genMongo    = flag.Bool("mongo", false, "Generate MongoDB repositories")
 		genHTTP     = flag.Bool("http", false, "Generate HTTP handlers")
 		httpPackage = flag.String("http-package", config.DefaultHandlerPackage, "Package name for HTTP handlers")
@@ -148,23 +149,48 @@ func main() {
 		mainGen.SetDBName(filepath.Base(targetModuleName)) // Default for now, will be generated in .env
 		mainGen.SetDefaultPort("8080")                     // Default for now, will be generated in .env
 
-		// Generate main.go content
-		mainCode, err := mainGen.GenerateMain()
-		if err != nil {
-			fmt.Printf("Error generating main.go: %v\n", err)
+		// Create cmd directory
+		cmdDir := filepath.Join(*outputDir, "cmd", filepath.Base(targetModuleName))
+		if err := os.MkdirAll(cmdDir, 0755); err != nil {
+			fmt.Printf("Error creating cmd directory: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Write main.go file
-		mainPath := filepath.Join(*outputDir, config.MainFile)
-		if _, err := os.Stat(mainPath); os.IsNotExist(err) || *overwrite {
-			if err := os.WriteFile(mainPath, []byte(mainCode), 0644); err != nil {
-				fmt.Printf("Error writing main.go: %v\n", err)
-				os.Exit(1)
+		// Generate main.go and routes.go files using basic init (no features)
+		files, err := mainGen.GenerateMain()
+		if err != nil {
+			fmt.Printf("Error generating main files: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Write files
+		for filename, content := range files {
+			filePath := filepath.Join(cmdDir, filename)
+
+			// Ensure parent directory exists
+			if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+				fmt.Printf("Error creating directory for %s: %v\n", filename, err)
+				continue
 			}
-			fmt.Printf("Generated main.go in %s\n", mainPath)
-		} else {
-			fmt.Printf("main.go already exists. Skipping (use --overwrite to force overwrite)\n")
+
+			// For main.go, only write if it doesn't exist (stable file)
+			// For routes.go, always overwrite (regenerated file)
+			shouldWrite := *overwrite
+			if strings.HasSuffix(filename, "routes.go") {
+				shouldWrite = true // Always regenerate routes
+			} else if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				shouldWrite = true // Write if doesn't exist
+			}
+
+			if shouldWrite {
+				if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+					fmt.Printf("Error writing %s: %v\n", filename, err)
+					continue
+				}
+				fmt.Printf("Generated %s\n", filePath)
+			} else {
+				fmt.Printf("%s already exists. Skipping (use --overwrite to force overwrite)\n", filename)
+			}
 		}
 
 		// Add dependencies to go.mod
@@ -249,64 +275,66 @@ func main() {
 		}
 	}
 
-	// Generate services for each schema
-	if err := os.MkdirAll(servicesDir, 0755); err != nil {
-		fmt.Printf("Error creating services directory: %v\n", err)
-		os.Exit(1)
-	}
+	// Generate services for each schema (if explicitly requested or if HTTP handlers need them)
+	if *genServices || *genHTTP {
+		if err := os.MkdirAll(servicesDir, 0755); err != nil {
+			fmt.Printf("Error creating services directory: %v\n", err)
+			os.Exit(1)
+		}
 
-	serviceGen, err := generator.NewServiceGenerator(apiParser, *packageName, importPath, templateFS)
-	if err != nil {
-		fmt.Printf("Error creating service generator: %v\n", err)
-	} else {
-		// Generate service for each schema
-		for _, name := range schemaNames {
-			serviceCode, err := serviceGen.GenerateService(name)
-			if err != nil {
-				fmt.Printf("Error generating service for %s: %v\n", name, err)
-				continue
-			}
-
-			// Create domain-specific directory for the service
-			schemaServiceDir := filepath.Join(servicesDir, strings.ToLower(name))
-			if err := os.MkdirAll(schemaServiceDir, 0755); err != nil {
-				fmt.Printf("Error creating directory for %s: %v\n", name, err)
-				continue
-			}
-
-			// Write service file
-			serviceFilename := strings.ToLower(name) + "_service.go"
-			serviceFilePath := filepath.Join(schemaServiceDir, serviceFilename)
-
-			// Check if file exists, don't overwrite unless explicitly requested
-			if _, err := os.Stat(serviceFilePath); os.IsNotExist(err) || *overwrite {
-				if err := os.WriteFile(serviceFilePath, []byte(serviceCode), 0644); err != nil {
-					fmt.Printf("Error writing service file for %s: %v\n", name, err)
+		serviceGen, err := generator.NewServiceGenerator(apiParser, *packageName, importPath, templateFS)
+		if err != nil {
+			fmt.Printf("Error creating service generator: %v\n", err)
+		} else {
+			// Generate service for each schema
+			for _, name := range schemaNames {
+				serviceCode, err := serviceGen.GenerateService(name)
+				if err != nil {
+					fmt.Printf("Error generating service for %s: %v\n", name, err)
 					continue
 				}
-				fmt.Printf("Generated service for %s in %s\n", name, serviceFilePath)
-			} else {
-				fmt.Printf("Service file for %s already exists. Skipping (use --overwrite to force overwrite)\n", name)
-			}
 
-			// Generate service tests
-			serviceTestCode, err := serviceGen.GenerateServiceTests(name)
-			if err != nil {
-				fmt.Printf("Error generating service tests for %s: %v\n", name, err)
-			} else {
-				// Write service test file
-				testFilename := strings.ToLower(name) + "_service_test.go"
-				testFilePath := filepath.Join(schemaServiceDir, testFilename)
+				// Create domain-specific directory for the service
+				schemaServiceDir := filepath.Join(servicesDir, strings.ToLower(name))
+				if err := os.MkdirAll(schemaServiceDir, 0755); err != nil {
+					fmt.Printf("Error creating directory for %s: %v\n", name, err)
+					continue
+				}
+
+				// Write service file
+				serviceFilename := strings.ToLower(name) + "_service.go"
+				serviceFilePath := filepath.Join(schemaServiceDir, serviceFilename)
 
 				// Check if file exists, don't overwrite unless explicitly requested
-				if _, err := os.Stat(testFilePath); os.IsNotExist(err) || *overwrite {
-					if err := os.WriteFile(testFilePath, []byte(serviceTestCode), 0644); err != nil {
-						fmt.Printf("Error writing service test file for %s: %v\n", name, err)
-					} else {
-						fmt.Printf("Generated service tests for %s in %s\n", name, testFilePath)
+				if _, err := os.Stat(serviceFilePath); os.IsNotExist(err) || *overwrite {
+					if err := os.WriteFile(serviceFilePath, []byte(serviceCode), 0644); err != nil {
+						fmt.Printf("Error writing service file for %s: %v\n", name, err)
+						continue
 					}
+					fmt.Printf("Generated service for %s in %s\n", name, serviceFilePath)
 				} else {
-					fmt.Printf("Service test file for %s already exists. Skipping (use --overwrite to force overwrite)\n", name)
+					fmt.Printf("Service file for %s already exists. Skipping (use --overwrite to force overwrite)\n", name)
+				}
+
+				// Generate service tests
+				serviceTestCode, err := serviceGen.GenerateServiceTests(name)
+				if err != nil {
+					fmt.Printf("Error generating service tests for %s: %v\n", name, err)
+				} else {
+					// Write service test file
+					testFilename := strings.ToLower(name) + "_service_test.go"
+					testFilePath := filepath.Join(schemaServiceDir, testFilename)
+
+					// Check if file exists, don't overwrite unless explicitly requested
+					if _, err := os.Stat(testFilePath); os.IsNotExist(err) || *overwrite {
+						if err := os.WriteFile(testFilePath, []byte(serviceTestCode), 0644); err != nil {
+							fmt.Printf("Error writing service test file for %s: %v\n", name, err)
+						} else {
+							fmt.Printf("Generated service tests for %s in %s\n", name, testFilePath)
+						}
+					} else {
+						fmt.Printf("Service test file for %s already exists. Skipping (use --overwrite to force overwrite)\n", name)
+					}
 				}
 			}
 		}
@@ -467,6 +495,43 @@ func main() {
 				fmt.Printf("Generated HTTP handler in %s\n", handlerFilePath)
 			} else {
 				fmt.Printf("HTTP handler file %s already exists. Skipping (use --overwrite to force overwrite)\n", handlerFilePath)
+			}
+		}
+	}
+
+	// Regenerate routes.go if any components were generated
+	if *genServices || *genMongo || *genHTTP || *initProject {
+		// Create main generator for routes update
+		mainGen, err := generator.NewMainGenerator(apiParser, importPath, templateFS)
+		if err != nil {
+			fmt.Printf("Error creating main generator for routes: %v\n", err)
+		} else {
+			// Configure main generator
+			mainGen.SetMongoURI("mongodb://localhost:27017")
+			mainGen.SetDBName(filepath.Base(targetModuleName))
+			mainGen.SetDefaultPort("8080")
+
+			// Generate routes.go with current feature flags
+			files, err := mainGen.GenerateWithFeatures(*genMongo, *genMongo, *genHTTP)
+			if err != nil {
+				fmt.Printf("Error generating routes: %v\n", err)
+			} else {
+				// Only write routes.go (always overwrite)
+				if routesContent, exists := files["routes.go"]; exists {
+					cmdDir := filepath.Join(*outputDir, "cmd", filepath.Base(targetModuleName))
+					routesPath := filepath.Join(cmdDir, "routes.go")
+
+					// Ensure directory exists
+					if err := os.MkdirAll(cmdDir, 0755); err != nil {
+						fmt.Printf("Error creating directory for routes.go: %v\n", err)
+					} else {
+						if err := os.WriteFile(routesPath, []byte(routesContent), 0644); err != nil {
+							fmt.Printf("Error writing routes.go: %v\n", err)
+						} else {
+							fmt.Printf("Updated routes.go in %s\n", routesPath)
+						}
+					}
+				}
 			}
 		}
 	}
