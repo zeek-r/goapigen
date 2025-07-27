@@ -15,7 +15,18 @@ import (
 	"github.com/joho/godotenv"
 {{- if .UseMongo}}
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+{{- end}}
+
+{{- if .HasResources}}
+	// Import generated packages
+{{- range .Resources}}
+{{- if .HasRepository}}
+	{{.VarName}}Repository "{{$.ImportPath}}/internal/adapters/mongo/{{.VarName}}"
+{{- end}}
+{{- if .HasService}}
+	{{.VarName}}Service "{{$.ImportPath}}/internal/services/{{.VarName}}"
+{{- end}}
+{{- end}}
 {{- end}}
 )
 
@@ -30,26 +41,37 @@ func main() {
 		log.Printf("Warning: Could not load .env file: %v", err)
 	}
 
-{{- if .UseMongo}}
-	// Setup MongoDB client
-	mongoClient, err := setupMongoDB()
+	// Setup database connections (implemented in database.go)
+	db, err := setupDatabase()
 	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
+		log.Fatalf("Failed to setup database: %v", err)
 	}
+{{- if .UseMongo}}
 	defer func() {
-		if err := mongoClient.Disconnect(context.Background()); err != nil {
-			log.Printf("Error disconnecting from MongoDB: %v", err)
+		if db.MongoDB != nil {
+			if err := closeMongoDB(db.MongoDB); err != nil {
+				log.Printf("Error closing database connections: %v", err)
+			}
 		}
 	}()
-{{- else}}
-	var mongoClient interface{} // Placeholder for when MongoDB is not used
 {{- end}}
 
 	// Setup Chi router with middleware
 	r := setupRouter()
 
-	// Register routes (implemented in routes.go)
-	registerRoutes(r, mongoClient)
+	// Setup handlers and register routes
+{{- $hasHandlers := false}}
+{{- range .Resources}}
+	{{- if .HasHandler}}
+		{{- $hasHandlers = true}}
+	{{- end}}
+{{- end}}
+{{- if $hasHandlers}}
+	handlers := setupHandlers(db)
+	registerRoutes(r, handlers)
+{{- else}}
+	registerRoutes(r)
+{{- end}}
 
 	// Determine port
 	port := os.Getenv("PORT")
@@ -76,34 +98,7 @@ func main() {
 	gracefulShutdown(srv)
 }
 
-{{- if .UseMongo}}
-func setupMongoDB() (*mongo.Client, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
-	// Get MongoDB URI from environment
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		mongoURI = "{{.MongoURI}}" // Default if not set
-	}
-
-	// Connect to MongoDB
-	clientOptions := options.Client().ApplyURI(mongoURI)
-	client, err := mongo.Connect(ctx, clientOptions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
-	}
-
-	// Ping the database to verify connection
-	err = client.Ping(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ping MongoDB: %w", err)
-	}
-
-	log.Println("Connected to MongoDB successfully")
-	return client, nil
-}
-{{- end}}
 
 func setupRouter() *chi.Mux {
 	r := chi.NewRouter()
@@ -142,4 +137,36 @@ func gracefulShutdown(srv *http.Server) {
 	}
 
 	log.Println("Server gracefully stopped")
-} 
+}
+
+{{- $hasHandlers := false}}{{- range .Resources}}{{- if .HasHandler}}{{- $hasHandlers = true}}{{- end}}{{- end}}
+{{- if $hasHandlers}}
+// setupHandlers creates all services for dependency injection  
+func setupHandlers(db *DatabaseConnections) *Handlers {
+{{- if .UseMongo}}
+	// Get database name from environment
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "{{.DBName}}" // Default if not set
+	}
+{{- end}}
+
+	handlers := &Handlers{}
+
+{{- range .Resources}}
+{{- if and .HasService .HasHandler}}
+	// Setup {{.Name}} service for dependency injection
+{{- if .HasRepository}}
+	{{.VarName}}Repo := {{.VarName}}Repository.New{{.Name}}Repository(db.MongoDB.Database(dbName))
+	{{.VarName}}Svc := {{.VarName}}Service.New{{.Name}}Service({{.VarName}}Repo)
+{{- else}}
+	{{.VarName}}Svc := {{.VarName}}Service.New{{.Name}}Service(nil) // No repository
+{{- end}}
+	
+	handlers.{{.Name}}Service = {{.VarName}}Svc
+{{- end}}
+{{- end}}
+
+	return handlers
+}
+{{- end}} 

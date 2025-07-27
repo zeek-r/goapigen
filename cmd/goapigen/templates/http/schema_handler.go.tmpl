@@ -1,6 +1,14 @@
 package handler
 
-// New{{.Name}}Handler creates a router with all {{.Name}} endpoints registered
-func New{{.Name}}Handler(svc interface{}) interface{} {
-	return nil
-} 
+import (
+	"github.com/go-chi/chi/v5"
+	"{{.ImportPath}}/internal/services/{{.Domain}}"
+)
+
+// New{{.Domain}}Handler registers all {{.Domain}} endpoints on the provided router
+func New{{.Name}}Handler(r chi.Router, {{.Domain}}Service {{.Domain}}.{{.Name}}Service) {
+	{{range .Operations}}
+	// Register {{.OperationID}} handler
+	New{{.OperationID}}Handler({{$.Domain}}Service).Register(r)
+	{{end}}
+}
