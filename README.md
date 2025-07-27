@@ -1,6 +1,6 @@
 # Go API Generator (goapigen)
 
-🚀 **A powerful code generator for Go APIs** that transforms OpenAPI specifications into production-ready Go applications with clean architecture, MongoDB integration, and comprehensive testing.
+🚀 **A powerful code generator for Go APIs** that transforms OpenAPI specifications into production-ready Go applications with clean architecture, MongoDB integration, context-aware logging, and comprehensive configuration management.
 
 ## ✨ Features
 
@@ -9,7 +9,8 @@
 - **🗄️ MongoDB integration** - Ready-to-use repository implementations with MongoDB driver
 - **🌐 HTTP handlers** - Chi router-based REST API with proper error handling
 - **✅ Test generation** - Unit tests for all generated components
-- **⚙️ Configuration management** - Environment-based configuration with .env files
+- **⚙️ Configuration management** - Environment-based configuration with envconfig
+- **📋 Context-aware logging** - Structured logging with zapctxd and field propagation
 - **🔒 Type safety** - Strongly typed Go code with proper validation tags
 - **📦 Project scaffolding** - Complete project structure with dependencies
 
@@ -32,13 +33,13 @@ go build -o goapigen cmd/goapigen/main.go
 # Generate a complete API project
 ./goapigen --spec examples/petstore/openapi.yaml \
            --output ./my-api \
-           --init --types --mongo --http
+           --init --services --mongo --http
 
 # Navigate to generated project
 cd my-api
 
 # Start the API
-go run .
+go run cmd/my-api/*.go
 ```
 
 ## 📖 Usage
@@ -50,11 +51,13 @@ go run .
 | `--spec` | Path to OpenAPI specification file | Required |
 | `--output` | Output directory for generated code | `.` |
 | `--package` | Package name for generated code | `api` |
-| `--init` | Initialize full project structure | `false` |
+| `--init` | Initialize full project structure with config and logging | `false` |
 | `--types` | Generate type definitions | `true` |
+| `--services` | Generate service layer | `false` |
 | `--mongo` | Generate MongoDB repositories | `false` |
 | `--http` | Generate HTTP handlers | `false` |
 | `--overwrite` | Overwrite existing files | `false` |
+| `--schema` | Generate code for specific schema only | All schemas |
 
 ### Example Commands
 
@@ -62,8 +65,8 @@ go run .
 # Generate only types
 ./goapigen --spec api.yaml --types
 
-# Generate complete API with MongoDB
-./goapigen --spec api.yaml --init --types --mongo --http --output ./my-api
+# Generate complete API with MongoDB and services
+./goapigen --spec api.yaml --init --services --mongo --http --output ./my-api
 
 # Generate for specific schema
 ./goapigen --spec api.yaml --schema Pet --types --mongo
@@ -73,50 +76,101 @@ go run .
 
 ```
 your-api/
-├── main.go                    # Application entry point
-├── .env                       # Environment configuration
-├── go.mod                     # Go module
-├── internal/
-│   ├── pkg/
-│   │   ├── domain/           # 🎯 Domain entities and errors
-│   │   │   ├── types.go      # Generated types from OpenAPI schemas
-│   │   │   └── errors.go     # Domain error types
-│   │   └── httputil/         # 🔧 HTTP utilities
-│   │       ├── handler_wrapper.go
-│   │       └── http_utils.go
-│   ├── services/             # 💼 Business logic layer
-│   │   ├── pet/             # Per-entity service packages
-│   │   │   ├── pet_service.go
-│   │   │   └── pet_service_test.go
-│   │   └── order/
-│   └── adapters/
-│       ├── mongo/           # 🗄️ Data persistence layer
-│       │   ├── pet/
-│       │   │   ├── pet_repository.go
-│       │   │   └── pet_repository_test.go
-│       │   └── order/
-│       └── http/            # 🌐 HTTP presentation layer
-│           ├── pet/         # Per-entity handler packages
-│           │   ├── handler.go
-│           │   ├── createpet_handler.go
-│           │   ├── getpet_handler.go
-│           │   └── *_handler_test.go
-│           └── order/
+├── cmd/
+│   └── your-api/              # Application entry point
+│       ├── main.go           # Server startup
+│       ├── routes.go         # Route registration
+│       └── database.go       # Database setup
+├── .env                      # Environment configuration
+├── go.mod                    # Go module dependencies
+└── internal/
+    ├── pkg/
+    │   ├── config/           # 🔧 Configuration management
+    │   │   ├── config.go     # envconfig-based configuration
+    │   │   └── config_test.go
+    │   ├── logger/           # 📋 Context-aware logging
+    │   │   ├── logger.go     # zapctxd logger integration
+    │   │   └── logger_test.go
+    │   └── domain/           # 🎯 Domain entities and errors
+    │       ├── types.go      # Generated types from OpenAPI schemas
+    │       └── errors.go     # Domain error types
+    ├── services/             # 💼 Business logic layer
+    │   ├── pet/             # Per-entity service packages
+    │   │   ├── pet_service.go
+    │   │   └── pet_service_test.go
+    │   └── order/
+    └── adapters/
+        ├── repository/      # 🗄️ Data persistence layer
+        │   ├── pet/
+        │   │   ├── pet_repository.go
+        │   │   └── pet_repository_test.go
+        │   └── order/
+        └── http/            # 🌐 HTTP presentation layer
+            ├── pet/         # Per-entity handler packages
+            │   ├── handler.go
+            │   └── *_handler_test.go
+            └── order/
 ```
 
 ## 🎯 Architecture Principles
 
 ### Clean Architecture
 - **Domain Layer**: Core business entities and rules
-- **Service Layer**: Business logic and validation
+- **Service Layer**: Business logic and validation  
 - **Repository Layer**: Data access abstraction
 - **HTTP Layer**: Request/response handling
+- **Configuration Layer**: Environment-based configuration management
+- **Logging Layer**: Context-aware structured logging
 
 ### Key Design Patterns
 - **Dependency Injection**: Services depend on repository interfaces
 - **Error Handling**: Strongly typed domain errors with HTTP mapping
 - **Separation of Concerns**: Each layer has a single responsibility
 - **Interface Segregation**: Minimal viable interfaces between layers
+- **Configuration Management**: Struct-based environment variable processing
+- **Context-aware Logging**: Automatic field propagation through request contexts
+
+## 📋 Configuration Management
+
+The generated projects use `envconfig` for clean, struct-based configuration:
+
+```go
+type Config struct {
+    Server   ServerConfig   `envconfig:"SERVER"`
+    Database DatabaseConfig `envconfig:"DATABASE"`
+    Logging  LoggingConfig  `envconfig:"LOGGING"`
+}
+
+type ServerConfig struct {
+    Port string `envconfig:"PORT" default:"8080"`
+    Host string `envconfig:"HOST" default:"localhost"`
+}
+```
+
+### Environment Variables
+- `PORT` - Server port (default: 8080)
+- `HOST` - Server host (default: localhost)
+- `MONGO_URI` - MongoDB connection string (default: mongodb://localhost:27017)
+- `DB_NAME` - Database name (default: project name)
+- `LOG_LEVEL` - Logging level: debug, info, warn, error (default: info)
+- `LOG_DEVELOPMENT` - Development mode logging (default: false)
+- `LOG_FORMAT` - Log format: json, console (default: json)
+
+## 📋 Context-aware Logging
+
+The generated projects use `zapctxd` for structured, context-aware logging:
+
+```go
+// Initialize logger from configuration
+logger := logger.NewFromEnv()
+
+// Add fields to context
+ctx = ctxd.AddFields(ctx, "user_id", "123", "request_id", "abc")
+
+// Log with automatic field propagation
+logger.Info(ctx, "processing request") 
+// Output: {"level":"info","msg":"processing request","user_id":"123","request_id":"abc"}
+```
 
 ## 📋 Example OpenAPI Schema
 
@@ -164,9 +218,9 @@ paths:
 ```go
 // Generated domain types with validation tags
 type Pet struct {
-    ID     string `json:"id" bson:"id" validate:"format=uuid"`
-    Name   string `json:"name" bson:"name" validate:"required,min=1,max=100"`
-    Status string `json:"status" bson:"status" validate:"required,enum=available pending sold"`
+    ID     string `json:"id" bson:"id"`
+    Name   string `json:"name" bson:"name"`
+    Status string `json:"status" bson:"status"`
 }
 ```
 
@@ -195,7 +249,6 @@ The project includes a comprehensive test suite with modern Go testing practices
 ### **Test Infrastructure**
 - **Table-driven tests** with comprehensive coverage
 - **Testify assertions** for better readability and error reporting
-- **Benchmark tests** for performance measurement
 - **Test utilities** package for common testing patterns
 - **Mock-friendly design** with clean interfaces
 
@@ -210,9 +263,6 @@ go test -cover ./...
 # Run specific package tests
 go test ./internal/parser/... -v
 
-# Run benchmarks
-go test -bench=. ./internal/parser/...
-
 # Generate coverage HTML report
 go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out
 ```
@@ -220,32 +270,33 @@ go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out
 ### **Test Organization**
 ```
 internal/
-├── testutil/           # Common test utilities and helpers
-│   └── testutil.go    # OpenAPI specs, temp files, assertions
 ├── parser/
 │   └── openapi_test.go # Comprehensive parser tests
 └── generator/
     ├── *_test.go      # Generator-specific tests
     └── ...
+test/
+└── integration/       # End-to-end integration tests
+    └── generation_test.go
 ```
 
 ## 🌟 Current Status
 
 ### ✅ **Completed Features**
 - ✅ **OpenAPI 3.0 parsing and validation** - Comprehensive parser with full test coverage
-- ✅ **Go type generation from schemas** - Clean, validated Go structs from OpenAPI schemas
+- ✅ **Go type generation from schemas** - Clean Go structs from OpenAPI schemas  
 - ✅ **MongoDB repository generation** - Full CRUD repository implementations
 - ✅ **HTTP handler generation** - Chi router-based REST API with proper error handling
-- ✅ **Complete project scaffolding** - Full directory structure and dependency management
-- ✅ **Environment configuration** - .env file generation and loading
-- ✅ **Comprehensive test suite** - Table-driven tests with testify and benchmark coverage
-- ✅ **Clean compilation** - No warnings, proper linting, and Go 1.24 compatibility
-- ✅ **Domain-centric architecture** - Clean separation with strongly typed errors
+- ✅ **Service layer generation** - Business logic layer with clean interfaces
+- ✅ **Complete project scaffolding** - Full cmd/{project}/ structure and dependency management
+- ✅ **Environment configuration** - envconfig-based configuration management
+- ✅ **Context-aware logging** - zapctxd integration with structured logging
+- ✅ **Comprehensive test generation** - Unit tests for all generated components
+- ✅ **Integration test suite** - End-to-end generator validation
+- ✅ **Clean compilation** - No warnings, proper linting
 
 ### 🚧 **In Development**
-- 🔄 Enhanced generator test coverage
-- 🔄 Request/response validation utilities  
-- 🔄 Middleware support and custom route configuration
+- 🔄 Enhanced middleware support and custom route configuration
 - 🔄 Authentication and authorization patterns
 - 🔄 Database migrations and schema versioning
 - 🔄 API documentation generation
@@ -269,7 +320,7 @@ We welcome contributions! Here's how to get started:
 git clone https://github.com/zeek-r/goapigen.git
 cd goapigen
 
-# Ensure you have Go 1.24+
+# Ensure you have Go 1.21+
 go version
 
 # Download dependencies
@@ -278,11 +329,8 @@ go mod tidy
 # Run the comprehensive test suite
 go test ./... -v
 
-# Run benchmarks to check performance
-go test -bench=. ./internal/parser/...
-
 # Test code generation with example
-go run cmd/goapigen/main.go --spec examples/petstore/openapi.yaml --output test --init --types --mongo --http
+go run cmd/goapigen/main.go --spec examples/petstore/openapi.yaml --output test --init --services --mongo --http
 
 # Build the CLI tool
 go build -o goapigen cmd/goapigen/main.go
@@ -291,25 +339,24 @@ go build -o goapigen cmd/goapigen/main.go
 ## 📚 Examples
 
 Check out the `examples/` directory for:
-- **Petstore API** - Complete REST API example
-- **Advanced schemas** - Complex data models
-- **Custom configurations** - Environment setups
+- **Petstore API** - Complete REST API example with OpenAPI specification
 
 ## 🛠️ Built With
 
-- **Go 1.24+** - Core language with latest features
+- **Go 1.21+** - Core language
 - **Chi Router** - Lightweight, fast HTTP routing
 - **MongoDB Driver** - Official MongoDB Go driver
 - **OpenAPI 3.0** - Industry-standard API specifications
+- **zapctxd** - Context-aware structured logging
+- **envconfig** - Environment variable configuration
 - **Testify** - Modern testing framework with rich assertions
 - **kin-openapi** - OpenAPI 3.0 implementation for Go
 
 ## 🔍 Quality Assurance
 
 ### **Testing Excellence**
-- **95%+ test coverage** across core components
+- **Comprehensive test coverage** across core components
 - **Table-driven tests** for comprehensive scenario coverage
-- **Benchmark tests** for performance validation
 - **Integration tests** for end-to-end validation
 - **Mock-friendly architecture** for isolated unit testing
 
@@ -317,7 +364,7 @@ Check out the `examples/` directory for:
 - **Clean architecture** with clear separation of concerns
 - **Interface-driven design** for better testability
 - **Comprehensive error handling** with typed domain errors
-- **Go 1.24 compatibility** with modern language features
+- **Modern Go practices** with proper dependency management
 - **Lint-free codebase** following Go best practices
 
 ## 📄 License
@@ -329,6 +376,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **OpenAPI Initiative** for the specification standard
 - **Chi Router** team for the lightweight HTTP router
 - **MongoDB** team for the excellent Go driver
+- **zapctxd** team for context-aware logging
+- **envconfig** team for clean configuration management
 - **Go community** for best practices and patterns
 
 ---
