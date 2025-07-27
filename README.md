@@ -59,17 +59,288 @@ go run cmd/my-api/*.go
 | `--overwrite` | Overwrite existing files | `false` |
 | `--schema` | Generate code for specific schema only | All schemas |
 
-### Example Commands
+### Basic Workflows
 
+#### 1. **Quick Start - Complete API Generation**
 ```bash
-# Generate only types
-./goapigen --spec api.yaml --types
+# Generate a full-featured API project
+./goapigen --spec examples/petstore/openapi.yaml \
+           --output ./petstore-api \
+           --init --services --mongo --http
 
-# Generate complete API with MongoDB and services
-./goapigen --spec api.yaml --init --services --mongo --http --output ./my-api
+# Navigate and run
+cd petstore-api
+go run cmd/petstore-api/*.go
+```
 
-# Generate for specific schema
-./goapigen --spec api.yaml --schema Pet --types --mongo
+#### 2. **Types-Only Generation**
+```bash
+# Generate only domain types for existing projects
+./goapigen --spec api.yaml --types --output ./existing-project
+```
+
+#### 3. **Incremental Development**
+```bash
+# Start with types and services
+./goapigen --spec api.yaml --init --services --output ./my-api
+
+# Later add MongoDB support
+./goapigen --spec api.yaml --mongo --output ./my-api --overwrite
+
+# Finally add HTTP handlers
+./goapigen --spec api.yaml --http --output ./my-api --overwrite
+```
+
+#### 4. **Single Entity Development**
+```bash
+# Work on specific schema only
+./goapigen --spec api.yaml --schema User --services --mongo --http --output ./user-service
+```
+
+### Advanced Usage Examples
+
+#### **Microservice Architecture**
+```bash
+# Generate separate services for different domains
+./goapigen --spec api.yaml --schema User --init --services --mongo --http --output ./user-service
+./goapigen --spec api.yaml --schema Order --init --services --mongo --http --output ./order-service
+./goapigen --spec api.yaml --schema Product --init --services --mongo --http --output ./product-service
+```
+
+#### **API Gateway Pattern**
+```bash
+# Generate HTTP handlers only for gateway
+./goapigen --spec api.yaml --http --output ./api-gateway
+
+# Generate services and repositories for backend
+./goapigen --spec api.yaml --services --mongo --output ./backend-services
+```
+
+#### **Testing and Development**
+```bash
+# Generate with overwrite for rapid iteration
+./goapigen --spec api.yaml --init --services --mongo --http --output ./dev-api --overwrite
+
+# Generate types only for client SDKs
+./goapigen --spec api.yaml --types --package client --output ./client-sdk
+```
+
+### Working with Generated Projects
+
+#### **Project Structure Navigation**
+After generation, your project will have this structure:
+```bash
+my-api/
+├── cmd/my-api/           # 🚀 Application entry point
+│   ├── main.go          # Server setup and startup
+│   ├── routes.go        # HTTP route registration
+│   └── database.go      # Database connection setup
+├── internal/pkg/
+│   ├── config/          # 🔧 Configuration management
+│   ├── logger/          # 📋 Logging utilities
+│   └── domain/          # 🎯 Business entities
+├── internal/services/   # 💼 Business logic
+└── internal/adapters/   # 🔌 External integrations
+    ├── repository/      # 🗄️ Data persistence
+    └── http/           # 🌐 HTTP handlers
+```
+
+#### **Running the Generated Project**
+```bash
+cd my-api
+
+# Install dependencies
+go mod tidy
+
+# Run with default configuration
+go run cmd/my-api/*.go
+
+# Run with custom environment
+PORT=9000 LOG_LEVEL=debug go run cmd/my-api/*.go
+
+# Build for production
+go build -o my-api cmd/my-api/*.go
+./my-api
+```
+
+#### **Environment Configuration**
+```bash
+# Create .env file for development
+cat > .env << EOF
+PORT=8080
+HOST=0.0.0.0
+MONGO_URI=mongodb://localhost:27017
+DB_NAME=my_api_db
+LOG_LEVEL=debug
+LOG_DEVELOPMENT=true
+LOG_FORMAT=console
+EOF
+
+# Load and run
+source .env && go run cmd/my-api/*.go
+```
+
+#### **Testing the Generated API**
+```bash
+# Run all tests
+go test ./... -v
+
+# Test specific components
+go test ./internal/services/... -v
+go test ./internal/adapters/repository/... -v
+go test ./internal/adapters/http/... -v
+
+# Run with coverage
+go test -cover ./...
+
+# Integration testing
+curl http://localhost:8080/health
+curl http://localhost:8080/pets
+```
+
+### Configuration Management
+
+#### **Environment Variables Reference**
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `PORT` | Server port | `8080` | `PORT=9000` |
+| `HOST` | Server host | `localhost` | `HOST=0.0.0.0` |
+| `MONGO_URI` | MongoDB connection string | `mongodb://localhost:27017` | `MONGO_URI=mongodb://user:pass@host:27017` |
+| `DB_NAME` | Database name | Project name | `DB_NAME=production_db` |
+| `LOG_LEVEL` | Logging level | `info` | `LOG_LEVEL=debug` |
+| `LOG_DEVELOPMENT` | Development mode logging | `false` | `LOG_DEVELOPMENT=true` |
+| `LOG_FORMAT` | Log output format | `json` | `LOG_FORMAT=console` |
+
+#### **Production Configuration Example**
+```bash
+# Production environment variables
+export PORT=8080
+export HOST=0.0.0.0
+export MONGO_URI=mongodb://prod-cluster:27017
+export DB_NAME=production_api
+export LOG_LEVEL=info
+export LOG_DEVELOPMENT=false
+export LOG_FORMAT=json
+
+# Run production server
+./my-api
+```
+
+### Integration Patterns
+
+#### **Adding to Existing Projects**
+```bash
+# Generate types into existing project
+./goapigen --spec api.yaml --types --output ./existing-project/internal/models
+
+# Generate services separately
+./goapigen --spec api.yaml --services --output ./existing-project/internal/business
+
+# Integrate with existing database layer
+./goapigen --spec api.yaml --mongo --output ./existing-project/internal/data
+```
+
+#### **Custom Package Names**
+```bash
+# Generate with custom package naming
+./goapigen --spec api.yaml --package mycompany --http-package handlers --output ./corporate-api
+```
+
+### Troubleshooting
+
+#### **Common Issues and Solutions**
+
+**1. Module Not Found Errors**
+```bash
+# Ensure you're in the project root
+cd my-api
+go mod tidy
+
+# If using custom import paths, verify go.mod
+cat go.mod
+```
+
+**2. Port Already in Use**
+```bash
+# Use different port
+PORT=8081 go run cmd/my-api/*.go
+
+# Or find and kill existing process
+lsof -ti:8080 | xargs kill -9
+```
+
+**3. MongoDB Connection Issues**
+```bash
+# Test MongoDB connection
+mongosh "mongodb://localhost:27017"
+
+# Use custom connection string
+MONGO_URI="mongodb://localhost:27018" go run cmd/my-api/*.go
+```
+
+**4. Template Parsing Errors**
+```bash
+# Validate OpenAPI spec first
+./goapigen --spec api.yaml --types --output /tmp/test
+
+# Check for OpenAPI 3.0 compatibility
+curl -X POST "https://validator.swagger.io/validator/debug" \
+     -H "Content-Type: application/json" \
+     -d @api.yaml
+```
+
+### Best Practices
+
+#### **OpenAPI Specification Guidelines**
+```yaml
+# Use meaningful operationIds
+paths:
+  /pets:
+    get:
+      operationId: listPets    # ✅ Good
+      # operationId: getPets   # ❌ Ambiguous
+
+# Include proper descriptions
+components:
+  schemas:
+    Pet:
+      description: "A pet in the store"  # ✅ Helpful
+      properties:
+        name:
+          description: "Pet's name"      # ✅ Descriptive
+```
+
+#### **Generated Code Management**
+```bash
+# Keep generator templates separate from generated code
+project/
+├── api-spec/
+│   └── openapi.yaml
+├── generated-api/          # Generated code
+└── scripts/
+    └── generate.sh         # Generation script
+```
+
+#### **Development Workflow**
+```bash
+#!/bin/bash
+# scripts/generate.sh
+set -e
+
+echo "🚀 Generating API code..."
+./goapigen --spec api-spec/openapi.yaml \
+           --output generated-api \
+           --init --services --mongo --http \
+           --overwrite
+
+echo "📦 Installing dependencies..."
+cd generated-api && go mod tidy
+
+echo "🧪 Running tests..."
+go test ./... -v
+
+echo "✅ Generation complete!"
 ```
 
 ## 🏗️ Generated Architecture
